@@ -1,0 +1,14 @@
+backend=loki
+snapshot_phase=post_flush_pre_query
+raw_line_bytes=2000000000
+object_store_bytes=443772152
+objects=347
+object_store_bytes_source=garage_getbucketinfo_bytes
+local_workdir_total_bytes=2098508509
+local_wal_bytes=2098423844
+local_index_bytes_shipping_state_unknown=55993
+local_index_cache_bytes=12288
+local_compactor_bytes=4096
+local_workdir_source=one-shot tool image over read-only loki volume
+index_ship_barrier=not_established; du measures all local active/retained index bytes and does not prove shipped state; a post-query object-store snapshot follows
+object_store_bytes_to_raw_line_bytes=0.221886

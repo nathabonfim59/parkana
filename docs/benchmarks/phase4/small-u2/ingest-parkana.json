@@ -1,0 +1,261 @@
+{
+  "corpus": {
+    "version": 3,
+    "hash": "41adfc61c898c43b18b5bd6d5bc304a7f6200c2a66dc4d8c9e6726db890f3b0c",
+    "content_hash": "bc0830c44f62beea",
+    "seed": 8098146604754141185,
+    "start": "2026-11-05T00:17:36.151838Z",
+    "step_micros": 100,
+    "target_raw_line_bytes": 2000000000,
+    "raw_line_bytes": 2000000000,
+    "lines": 13129764,
+    "through": "2026-11-05T00:39:29.128238Z",
+    "stream_label": "service_name",
+    "instances_per_service": 4,
+    "streams": [
+      {
+        "name": "api",
+        "labels": {
+          "service_name": "api"
+        },
+        "lines": 3282441,
+        "raw_line_bytes": 493255961
+      },
+      {
+        "name": "checkout",
+        "labels": {
+          "service_name": "checkout"
+        },
+        "lines": 3282441,
+        "raw_line_bytes": 505585443
+      },
+      {
+        "name": "search",
+        "labels": {
+          "service_name": "search"
+        },
+        "lines": 3282441,
+        "raw_line_bytes": 500697207
+      },
+      {
+        "name": "worker",
+        "labels": {
+          "service_name": "worker"
+        },
+        "lines": 3282441,
+        "raw_line_bytes": 500461389
+      }
+    ],
+    "markers": [
+      {
+        "name": "frequent",
+        "literal": "PKFREQ-2v",
+        "bytes": 9,
+        "count": 1641221,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:17:36.151838Z",
+            "through": "2026-11-05T00:39:29.127938Z",
+            "count": 1641221
+          }
+        ],
+        "schedule": {
+          "every_records": 8,
+          "blocks": [
+            {
+              "from": 0,
+              "through": 13129763
+            }
+          ]
+        }
+      },
+      {
+        "name": "rare",
+        "literal": "PKRARE-9xqz",
+        "bytes": 11,
+        "count": 12288,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:17:49.259038Z",
+            "through": "2026-11-05T00:17:55.811138Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-05T00:18:35.134238Z",
+            "through": "2026-11-05T00:18:41.686338Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-05T00:20:19.991838Z",
+            "through": "2026-11-05T00:20:26.543938Z",
+            "count": 4096
+          }
+        ],
+        "schedule": {
+          "every_records": 16,
+          "blocks": [
+            {
+              "from": 131072,
+              "through": 196608
+            },
+            {
+              "from": 589824,
+              "through": 655360
+            },
+            {
+              "from": 1638400,
+              "through": 1703936
+            }
+          ]
+        }
+      },
+      {
+        "name": "absent",
+        "literal": "PKABSENT-7mvn",
+        "bytes": 13,
+        "count": 0,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [],
+        "schedule": {
+          "every_records": 0,
+          "blocks": []
+        }
+      },
+      {
+        "name": "short_4byte",
+        "literal": "zq9x",
+        "bytes": 4,
+        "count": 4096,
+        "index_eligible_grams": [
+          3,
+          4
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:18:02.366238Z",
+            "through": "2026-11-05T00:18:08.916738Z",
+            "count": 2048
+          },
+          {
+            "from": "2026-11-05T00:19:47.223838Z",
+            "through": "2026-11-05T00:19:53.774338Z",
+            "count": 2048
+          }
+        ],
+        "schedule": {
+          "every_records": 32,
+          "blocks": [
+            {
+              "from": 262144,
+              "through": 327680
+            },
+            {
+              "from": 1310720,
+              "through": 1376256
+            }
+          ]
+        }
+      }
+    ],
+    "templates": [
+      {
+        "name": "access_json",
+        "count": 1641364,
+        "raw_line_bytes": 294743313
+      },
+      {
+        "name": "app_logfmt",
+        "count": 1642100,
+        "raw_line_bytes": 248480954
+      },
+      {
+        "name": "plain",
+        "count": 1640862,
+        "raw_line_bytes": 158038964
+      },
+      {
+        "name": "nginx",
+        "count": 1642686,
+        "raw_line_bytes": 145389505
+      },
+      {
+        "name": "fixed_256",
+        "count": 1642033,
+        "raw_line_bytes": 424288103
+      },
+      {
+        "name": "audit_json",
+        "count": 1641386,
+        "raw_line_bytes": 364471914
+      },
+      {
+        "name": "stack",
+        "count": 1639961,
+        "raw_line_bytes": 267379608
+      },
+      {
+        "name": "heartbeat",
+        "count": 1639371,
+        "raw_line_bytes": 97207579
+      },
+      {
+        "name": "tail",
+        "count": 1,
+        "raw_line_bytes": 60
+      }
+    ]
+  },
+  "elapsed_seconds": 17.383492331,
+  "ack_raw_line_bytes": 2000000000,
+  "ack_lines": 13129764,
+  "ack_mb_s": 115.05168017553055,
+  "ack_lines_s": 755300.7042540973,
+  "generation": {
+    "seconds": 9.573989421,
+    "raw_line_bytes": 2000000000,
+    "lines": 13129764,
+    "mb_s": 208.89933256173376,
+    "percent_of_elapsed": 55.075178443440244
+  },
+  "delivery": {
+    "batches": 2626,
+    "requests": 10512,
+    "succeeded": 10512,
+    "failed": 0,
+    "retried": 0,
+    "ambiguous": 0,
+    "lines": 13129764,
+    "raw_line_bytes": 2000000000,
+    "clean": true,
+    "cancelled": false
+  },
+  "parallelism": {
+    "label_sets": 16,
+    "active_senders": 16,
+    "concurrency_limit": 16,
+    "peak_in_flight_pushes": 16
+  },
+  "batching": {
+    "entries_per_request": 1250,
+    "push_requests": 10512,
+    "attempted_entries": 13129764,
+    "min_entries_per_request": 608,
+    "max_entries_per_request": 1250,
+    "mean_entries_per_request": 1249.0262557077626
+  }
+}
+

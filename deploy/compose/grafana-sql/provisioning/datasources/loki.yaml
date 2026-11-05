@@ -1,0 +1,37 @@
+# Provisioned Loki-type datasources for Parkana's phase 2 development stack.
+#
+# Both point at the pinned external Loki datasource plugin (Grafana 13.3.0
+# does not bundle it) and differ only in URL and
+# display name. UIDs are stable so dashboards, links and scripts can address
+# them without looking up numeric ids:
+#
+#   Loki     uid=loki     http://loki:3100     (baseline)
+#   Parkana  uid=parkana  http://parkana:3100  (subject under test)
+#
+# Loki is the default datasource so a fresh Explore opens the baseline first;
+# switch the datasource picker to Parkana to compare. Neither datasource
+# enables derived fields, alerting or authentication in this local stack.
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 60
+
+  - name: Parkana
+    uid: parkana
+    type: loki
+    access: proxy
+    url: http://parkana:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 60

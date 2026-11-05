@@ -1,0 +1,11 @@
+loki_backend=skipped
+reason=--parkana-only
+loki_garage_init=skipped
+loki_ingest=skipped
+loki_flush_barrier=skipped
+loki_visibility=skipped
+loki_storage_pre_query=skipped
+loki_storage_post_query=skipped
+loki_query=skipped
+loki_compactor_metrics=skipped
+manifest_comparison=skipped (only one backend ran)

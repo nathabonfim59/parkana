@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-11-04T18:22:08.878288+00:00",
+  "provenance": "boat info bx_tcuxmj9w --json after the completed small run",
+  "sandbox": {
+    "id": "bx_tcuxmj9w",
+    "type": "large",
+    "vcpu": 8,
+    "memoryGB": 16,
+    "createdAt": "2026-11-04T16:53:34.539Z"
+  },
+  "note": "The wrapper inherited the base snapshot shape. Earlier lead text called an unspecified --type request default; this API record identifies the actual small VM as large."
+}

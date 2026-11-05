@@ -1,0 +1,33 @@
+{
+  "parkbench_sha256": "d7363cb4979efbf9c89c2be6955a4b9d67e80ca350ca684817f36fc6f4f7136b",
+  "parkbench_buildinfo": "/tmp/sol-c-full-v3/bin/parkbench: go1.27.3\n\tpath\tgithub.com/nathabonfim59/parkana/cmd/parkbench\n\tmod\tgithub.com/nathabonfim59/parkana\t(devel)\t\n\tdep\tgithub.com/golang/snappy\tv1.0.0\th1:Oy607GVXHs7RtbggtPBnr2RmDArIsAefDwvrdWvRhGs=\n\tdep\tgoogle.golang.org/protobuf\tv1.36.12\th1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-trimpath=true\n\tbuild\tCGO_ENABLED=1\n\tbuild\tGOARCH=amd64\n\tbuild\tGOOS=linux\n\tbuild\tGOAMD64=v1\n",
+  "images": [
+    {
+      "requested": "parkana-bench:phase3",
+      "Id": "sha256:856d2fd158932b4a5109d92b4a5d7516e686adb285936b778da3c109cf5081f0",
+      "RepoDigests": [
+        "parkana-bench@sha256:856d2fd158932b4a5109d92b4a5d7516e686adb285936b778da3c109cf5081f0"
+      ],
+      "Architecture": "amd64",
+      "Os": "linux"
+    },
+    {
+      "requested": "parkana-bench-garage:v2.5.0",
+      "Id": "sha256:149b8faaa59aff876383c7d2e1fc841e0cfe451d887436aa930456681c8ab5ba",
+      "RepoDigests": [
+        "parkana-bench-garage@sha256:149b8faaa59aff876383c7d2e1fc841e0cfe451d887436aa930456681c8ab5ba"
+      ],
+      "Architecture": "amd64",
+      "Os": "linux"
+    },
+    {
+      "requested": "grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
+      "Id": "sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
+      "RepoDigests": [
+        "grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28"
+      ],
+      "Architecture": "amd64",
+      "Os": "linux"
+    }
+  ]
+}

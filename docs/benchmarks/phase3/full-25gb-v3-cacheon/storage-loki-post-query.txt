@@ -1,0 +1,11 @@
+backend=loki
+snapshot_phase=post_query
+object_store_bytes=5754067094
+objects=4370
+object_store_bytes_delta_from_pre_query=61170
+local_workdir_total_bytes=907857
+local_wal_bytes=700416
+local_index_bytes_remaining=107974
+local_index_cache_bytes=83083
+local_compactor_bytes=4096
+local_workdir_source=one-shot tool image over read-only loki volume

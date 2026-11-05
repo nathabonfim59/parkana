@@ -1,0 +1,33 @@
+[Unit]
+Description=Parkana log store
+Documentation=file:///usr/share/doc/parkana/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=parkana
+Group=parkana
+EnvironmentFile=/etc/parkana/parkana.env
+ExecStart=/usr/bin/parkana
+Restart=on-failure
+RestartSec=5s
+# Let the ingester drain on stop.
+TimeoutStopSec=2min
+LimitNOFILE=65536
+StateDirectory=parkana
+StateDirectoryMode=0750
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/parkana
+
+[Install]
+WantedBy=multi-user.target

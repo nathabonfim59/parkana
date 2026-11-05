@@ -1,0 +1,1294 @@
+{
+  "version": 1,
+  "backend": "parkana",
+  "started_at": "2026-11-05T05:52:15.353595963Z",
+  "elapsed_seconds": 11.870549937,
+  "valid": true,
+  "errors": [],
+  "notes": [
+    "the first query is reported separately as a first observation; page-cache state was not controlled, so it is not a cache-state measurement",
+    "windows start at the manifest bound and end at most 1ms later because LogQL range literals accept whole milliseconds only; expected counts are recomputed for the rounded window",
+    "required Parkana series in both the before and after scrape: parkana_query_files_total{result=scanned}, parkana_query_files_total{result=pruned_index}, parkana_query_files_total{result=pruned_labels} and parkana_query_bytes_scanned_total; a missing one is null and invalidates the measurement",
+    "optional Parkana diagnostics (null when absent): parkana_querier_cache_fetched_bytes_total, parkana_querier_cache_downloads_total{result=success|error} and parkana_querier_sidecar_cache_fetched_bytes_total",
+    "bytes_scanned is catalog compressed candidate file bytes submitted to a scan attempt, including retries; it is not physical I/O",
+    "cache_fetched_bytes counts serialized object bytes copied into the remote object cache (partial copies included, FS direct hits excluded); sidecar_cache_fetched_bytes counts serialized sidecar bytes read into the decoded in-memory sidecar cache, including FS reads and partial failures; neither is network or disk traffic"
+  ],
+  "corpus": {
+    "version": 3,
+    "hash": "b1794a8f7d540f4c404a15f3c4f0b82c1f971a0807196b0ffad8e58602efefe4",
+    "content_hash": "cb7cbdbbf35b0743",
+    "seed": 8098146604754141185,
+    "start": "2026-11-05T00:17:36.151838Z",
+    "step_micros": 100,
+    "target_raw_line_bytes": 2000000000,
+    "raw_line_bytes": 2000000000,
+    "lines": 13309066,
+    "through": "2026-11-05T00:39:47.058438Z",
+    "stream_label": "service_name",
+    "instances_per_service": 16,
+    "streams": [
+      {
+        "name": "api",
+        "labels": {
+          "service_name": "api"
+        },
+        "lines": 13309066,
+        "raw_line_bytes": 2000000000
+      }
+    ],
+    "markers": [
+      {
+        "name": "frequent",
+        "literal": "PKFREQ-2v",
+        "bytes": 9,
+        "count": 1663634,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:17:36.151838Z",
+            "through": "2026-11-05T00:39:47.058338Z",
+            "count": 1663634
+          }
+        ],
+        "schedule": {
+          "every_records": 8,
+          "blocks": [
+            {
+              "from": 0,
+              "through": 13309065
+            }
+          ]
+        }
+      },
+      {
+        "name": "rare",
+        "literal": "PKRARE-9xqz",
+        "bytes": 11,
+        "count": 12288,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:17:49.259038Z",
+            "through": "2026-11-05T00:17:55.811138Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-05T00:18:35.134238Z",
+            "through": "2026-11-05T00:18:41.686338Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-05T00:20:19.991838Z",
+            "through": "2026-11-05T00:20:26.543938Z",
+            "count": 4096
+          }
+        ],
+        "schedule": {
+          "every_records": 16,
+          "blocks": [
+            {
+              "from": 131072,
+              "through": 196608
+            },
+            {
+              "from": 589824,
+              "through": 655360
+            },
+            {
+              "from": 1638400,
+              "through": 1703936
+            }
+          ]
+        }
+      },
+      {
+        "name": "absent",
+        "literal": "PKABSENT-7mvn",
+        "bytes": 13,
+        "count": 0,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [],
+        "schedule": {
+          "every_records": 0,
+          "blocks": []
+        }
+      },
+      {
+        "name": "short_4byte",
+        "literal": "zq9x",
+        "bytes": 4,
+        "count": 4096,
+        "index_eligible_grams": [
+          3,
+          4
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:18:02.366238Z",
+            "through": "2026-11-05T00:18:08.916738Z",
+            "count": 2048
+          },
+          {
+            "from": "2026-11-05T00:19:47.223838Z",
+            "through": "2026-11-05T00:19:53.774338Z",
+            "count": 2048
+          }
+        ],
+        "schedule": {
+          "every_records": 32,
+          "blocks": [
+            {
+              "from": 262144,
+              "through": 327680
+            },
+            {
+              "from": 1310720,
+              "through": 1376256
+            }
+          ]
+        }
+      }
+    ],
+    "templates": [
+      {
+        "name": "access_json",
+        "count": 1663802,
+        "raw_line_bytes": 294213929
+      },
+      {
+        "name": "app_logfmt",
+        "count": 1664701,
+        "raw_line_bytes": 247342003
+      },
+      {
+        "name": "plain",
+        "count": 1663255,
+        "raw_line_bytes": 155637158
+      },
+      {
+        "name": "nginx",
+        "count": 1664908,
+        "raw_line_bytes": 147376130
+      },
+      {
+        "name": "fixed_256",
+        "count": 1664538,
+        "raw_line_bytes": 430104407
+      },
+      {
+        "name": "audit_json",
+        "count": 1663755,
+        "raw_line_bytes": 364879222
+      },
+      {
+        "name": "stack",
+        "count": 1662184,
+        "raw_line_bytes": 266453074
+      },
+      {
+        "name": "heartbeat",
+        "count": 1661922,
+        "raw_line_bytes": 93993964
+      },
+      {
+        "name": "tail",
+        "count": 1,
+        "raw_line_bytes": 113
+      }
+    ]
+  },
+  "query_endpoint": "http://127.0.0.1:13100/loki/api/v1/query",
+  "selector": "{service_name=~\"api\"}",
+  "config": {
+    "repetitions": 5,
+    "warmups": 2,
+    "timeout_seconds": 120,
+    "classes": [
+      "frequent",
+      "rare",
+      "absent",
+      "short_4byte"
+    ],
+    "windows": [
+      "short",
+      "long"
+    ],
+    "metrics_url": "http://127.0.0.1:13100/metrics"
+  },
+  "first_observation": {
+    "class": "frequent",
+    "window": "short",
+    "query": "sum(count_over_time({service_name=~\"api\"} |= \"PKFREQ-2v\" [19s658ms]))",
+    "expected_count": 24573,
+    "latency_ms": 57.959393,
+    "status_code": 200,
+    "observed_count": 24573,
+    "timeout": false,
+    "canceled": false,
+    "controlled_restart": false,
+    "note": "first HTTP query issued by this process; the backend was not restarted and its page cache was not dropped, so page-cache state was not controlled"
+  },
+  "series": [
+    {
+      "class": "frequent",
+      "literal": "PKFREQ-2v",
+      "window": "short",
+      "from": "2026-11-05T00:17:49.259038Z",
+      "through": "2026-11-05T00:18:08.917038Z",
+      "eval_time": "2026-11-05T00:18:08.917037Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"PKFREQ-2v\" [19s658ms]))",
+      "expected_count": 24573,
+      "observed_count": 24573,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        57.959393,
+        41.878152
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 44.237501,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 36.85931,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 48.541836,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 34.961043,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 36.978816,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 36.978816,
+      "p99_ms": 48.541836,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 0,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 146770125,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "frequent",
+      "literal": "PKFREQ-2v",
+      "window": "long",
+      "from": "2026-11-05T00:17:36.151838Z",
+      "through": "2026-11-05T00:39:47.058838Z",
+      "eval_time": "2026-11-05T00:39:47.058837Z",
+      "range_ms": 1330907,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"PKFREQ-2v\" [22m10s907ms]))",
+      "expected_count": 1663634,
+      "observed_count": 1663634,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        1290.991895,
+        1255.571518
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 1234.091833,
+          "status_code": 200,
+          "observed_count": 1663634,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 2,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 402912574,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 1203.763701,
+          "status_code": 200,
+          "observed_count": 1663634,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 2,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 402912574,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 1241.890456,
+          "status_code": 200,
+          "observed_count": 1663634,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 2,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 402912574,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 1265.187136,
+          "status_code": 200,
+          "observed_count": 1663634,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 2,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 402912574,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 1240.696736,
+          "status_code": 200,
+          "observed_count": 1663634,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 2,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 402912574,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 1240.696736,
+      "p99_ms": 1265.187136,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 2,
+      "files_pruned_index": 0,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 402912574,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "rare",
+      "literal": "PKRARE-9xqz",
+      "window": "short",
+      "from": "2026-11-05T00:17:49.259038Z",
+      "through": "2026-11-05T00:18:08.917038Z",
+      "eval_time": "2026-11-05T00:18:08.917037Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"PKRARE-9xqz\" [19s658ms]))",
+      "expected_count": 4096,
+      "observed_count": 4096,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        20.657385,
+        20.355638
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 18.871619,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 19.26429,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 21.595774,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 20.975765,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 19.749528,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 19.749528,
+      "p99_ms": 21.595774,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 0,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 146770125,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "rare",
+      "literal": "PKRARE-9xqz",
+      "window": "long",
+      "from": "2026-11-05T00:17:36.151838Z",
+      "through": "2026-11-05T00:39:47.058838Z",
+      "eval_time": "2026-11-05T00:39:47.058837Z",
+      "range_ms": 1330907,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"PKRARE-9xqz\" [22m10s907ms]))",
+      "expected_count": 12288,
+      "observed_count": 12288,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        184.396084,
+        187.66802
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 196.032457,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 179.819015,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 182.861471,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 180.637406,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 177.446021,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 180.637406,
+      "p99_ms": 196.032457,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 1,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 146770125,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "absent",
+      "literal": "PKABSENT-7mvn",
+      "window": "short",
+      "from": "2026-11-05T00:17:49.259038Z",
+      "through": "2026-11-05T00:18:08.917038Z",
+      "eval_time": "2026-11-05T00:18:08.917037Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"PKABSENT-7mvn\" [19s658ms]))",
+      "expected_count": 0,
+      "observed_count": 0,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        0.786735,
+        0.524788
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 0.753206,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 0.354075,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 0.605216,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 0.419681,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 0.375807,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 0.419681,
+      "p99_ms": 0.753206,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 0,
+      "files_pruned_index": 1,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 0,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "absent",
+      "literal": "PKABSENT-7mvn",
+      "window": "long",
+      "from": "2026-11-05T00:17:36.151838Z",
+      "through": "2026-11-05T00:39:47.058838Z",
+      "eval_time": "2026-11-05T00:39:47.058837Z",
+      "range_ms": 1330907,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"PKABSENT-7mvn\" [22m10s907ms]))",
+      "expected_count": 0,
+      "observed_count": 0,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        0.3644,
+        0.224302
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 0.503977,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 2,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 0.296008,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 2,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 0.32982,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 2,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 0.666517,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 2,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 0.330749,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 2,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 0.330749,
+      "p99_ms": 0.666517,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 0,
+      "files_pruned_index": 2,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 0,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "short_4byte",
+      "literal": "zq9x",
+      "window": "short",
+      "from": "2026-11-05T00:17:49.259038Z",
+      "through": "2026-11-05T00:18:08.917038Z",
+      "eval_time": "2026-11-05T00:18:08.917037Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"zq9x\" [19s658ms]))",
+      "expected_count": 2048,
+      "observed_count": 2048,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        19.828681,
+        17.010517
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 19.587274,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 18.739598,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 18.279998,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 18.85983,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 17.65109,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 0,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 18.739598,
+      "p99_ms": 19.587274,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 0,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 146770125,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "short_4byte",
+      "literal": "zq9x",
+      "window": "long",
+      "from": "2026-11-05T00:17:36.151838Z",
+      "through": "2026-11-05T00:39:47.058838Z",
+      "eval_time": "2026-11-05T00:39:47.058837Z",
+      "range_ms": 1330907,
+      "query": "sum(count_over_time({service_name=~\"api\"} |= \"zq9x\" [22m10s907ms]))",
+      "expected_count": 4096,
+      "observed_count": 4096,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        164.372741,
+        168.269864
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 180.300247,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 171.559156,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 165.430557,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 160.981559,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 162.43815,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 1,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 146770125,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 165.430557,
+      "p99_ms": 180.300247,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 1,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 146770125,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    }
+  ]
+}
+

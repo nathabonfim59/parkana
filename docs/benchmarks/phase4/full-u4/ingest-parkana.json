@@ -1,0 +1,261 @@
+{
+  "corpus": {
+    "version": 3,
+    "hash": "eb29949b7aa004a2f7e9c499b5818a37e5a2e88a8a340438b1875a6ab5e5d32e",
+    "content_hash": "45bea2818eaf36a5",
+    "seed": 8098146604754141185,
+    "start": "2026-11-03T00:27:57.30252Z",
+    "step_micros": 100,
+    "target_raw_line_bytes": 25000000000,
+    "raw_line_bytes": 25000000000,
+    "lines": 163054456,
+    "through": "2026-11-03T04:59:42.74812Z",
+    "stream_label": "service_name",
+    "instances_per_service": 4,
+    "streams": [
+      {
+        "name": "api",
+        "labels": {
+          "service_name": "api"
+        },
+        "lines": 40763614,
+        "raw_line_bytes": 6165112674
+      },
+      {
+        "name": "checkout",
+        "labels": {
+          "service_name": "checkout"
+        },
+        "lines": 40763614,
+        "raw_line_bytes": 6319217270
+      },
+      {
+        "name": "search",
+        "labels": {
+          "service_name": "search"
+        },
+        "lines": 40763614,
+        "raw_line_bytes": 6258381400
+      },
+      {
+        "name": "worker",
+        "labels": {
+          "service_name": "worker"
+        },
+        "lines": 40763614,
+        "raw_line_bytes": 6257288656
+      }
+    ],
+    "markers": [
+      {
+        "name": "frequent",
+        "literal": "PKFREQ-2v",
+        "bytes": 9,
+        "count": 20381807,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-03T00:27:57.30252Z",
+            "through": "2026-11-03T04:59:42.74742Z",
+            "count": 20381807
+          }
+        ],
+        "schedule": {
+          "every_records": 8,
+          "blocks": [
+            {
+              "from": 0,
+              "through": 163054455
+            }
+          ]
+        }
+      },
+      {
+        "name": "rare",
+        "literal": "PKRARE-9xqz",
+        "bytes": 11,
+        "count": 12288,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-03T00:28:10.40972Z",
+            "through": "2026-11-03T00:28:16.96182Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-03T00:28:56.28492Z",
+            "through": "2026-11-03T00:29:02.83702Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-03T00:30:41.14252Z",
+            "through": "2026-11-03T00:30:47.69462Z",
+            "count": 4096
+          }
+        ],
+        "schedule": {
+          "every_records": 16,
+          "blocks": [
+            {
+              "from": 131072,
+              "through": 196608
+            },
+            {
+              "from": 589824,
+              "through": 655360
+            },
+            {
+              "from": 1638400,
+              "through": 1703936
+            }
+          ]
+        }
+      },
+      {
+        "name": "absent",
+        "literal": "PKABSENT-7mvn",
+        "bytes": 13,
+        "count": 0,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [],
+        "schedule": {
+          "every_records": 0,
+          "blocks": []
+        }
+      },
+      {
+        "name": "short_4byte",
+        "literal": "zq9x",
+        "bytes": 4,
+        "count": 4096,
+        "index_eligible_grams": [
+          3,
+          4
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-03T00:28:23.51692Z",
+            "through": "2026-11-03T00:28:30.06742Z",
+            "count": 2048
+          },
+          {
+            "from": "2026-11-03T00:30:08.37452Z",
+            "through": "2026-11-03T00:30:14.92502Z",
+            "count": 2048
+          }
+        ],
+        "schedule": {
+          "every_records": 32,
+          "blocks": [
+            {
+              "from": 262144,
+              "through": 327680
+            },
+            {
+              "from": 1310720,
+              "through": 1376256
+            }
+          ]
+        }
+      }
+    ],
+    "templates": [
+      {
+        "name": "access_json",
+        "count": 20386870,
+        "raw_line_bytes": 3684354845
+      },
+      {
+        "name": "app_logfmt",
+        "count": 20390425,
+        "raw_line_bytes": 3108989079
+      },
+      {
+        "name": "plain",
+        "count": 20374905,
+        "raw_line_bytes": 1986000591
+      },
+      {
+        "name": "nginx",
+        "count": 20385784,
+        "raw_line_bytes": 1827902904
+      },
+      {
+        "name": "fixed_256",
+        "count": 20383413,
+        "raw_line_bytes": 5266596312
+      },
+      {
+        "name": "audit_json",
+        "count": 20380526,
+        "raw_line_bytes": 4548826755
+      },
+      {
+        "name": "stack",
+        "count": 20376391,
+        "raw_line_bytes": 3345717684
+      },
+      {
+        "name": "heartbeat",
+        "count": 20376141,
+        "raw_line_bytes": 1231611702
+      },
+      {
+        "name": "tail",
+        "count": 1,
+        "raw_line_bytes": 128
+      }
+    ]
+  },
+  "elapsed_seconds": 524.172631219,
+  "ack_raw_line_bytes": 25000000000,
+  "ack_lines": 163054456,
+  "ack_mb_s": 47.69421085923688,
+  "ack_lines_s": 311070.1442400865,
+  "generation": {
+    "seconds": 159.479850171,
+    "raw_line_bytes": 25000000000,
+    "lines": 163054456,
+    "mb_s": 156.75961554512438,
+    "percent_of_elapsed": 30.42506240742072
+  },
+  "delivery": {
+    "batches": 32611,
+    "requests": 130448,
+    "succeeded": 130448,
+    "failed": 0,
+    "retried": 0,
+    "ambiguous": 0,
+    "lines": 163054456,
+    "raw_line_bytes": 25000000000,
+    "clean": true,
+    "cancelled": false
+  },
+  "parallelism": {
+    "label_sets": 16,
+    "active_senders": 16,
+    "concurrency_limit": 16,
+    "peak_in_flight_pushes": 16
+  },
+  "batching": {
+    "entries_per_request": 1250,
+    "push_requests": 130448,
+    "attempted_entries": 163054456,
+    "min_entries_per_request": 880,
+    "max_entries_per_request": 1250,
+    "mean_entries_per_request": 1249.9575003066357
+  }
+}
+

@@ -1,0 +1,332 @@
+# Parkana development stack: Garage + Parkana, plus the phase 2 read stack
+# (Loki, Alloy, Grafana and finite push generators).
+#
+# Usage (from deploy/compose/, or add -f deploy/compose/compose.yaml from the
+# repository root):
+#
+#   docker compose up --build                     # phase 1: Garage + Parkana
+#   docker compose --profile phase2 up --build    # phase 1 + Loki/Alloy/Grafana
+#
+# The phase 2 services use the `phase2` profile so a plain `up` keeps the
+# phase 1 contract (scripts/e2e-phase1.sh and deploy/compose/validate.sh run
+# the same project and service set they did before). Nothing about the phase 1
+# service names, volumes or host port variables changes.
+#
+# Object storage is Garage (dxflrs/garage). Loki, Alloy and Grafana are pinned
+# to exact release tags *and* manifest-list digests; override the *_IMAGE
+# variables only for another verified tag/digest. Parkana and pushgen are
+# built from the repository Dockerfile.
+#
+# All host ports are published on 127.0.0.1 only and are configurable so
+# several stacks can run side by side:
+#
+#   PARKANA_HTTP_PORT   default 3100
+#   PARKANA_S3_PORT     default 3900
+#   LOKI_HTTP_PORT      default 3101
+#   ALLOY_HTTP_PORT     default 12345
+#   GRAFANA_HTTP_PORT   default 3000
+#
+# The one-shot garage-init service creates the single-node layout, imports the
+# fixed development S3 key and grants it the parkana bucket, so Parkana never
+# creates buckets itself (-storage.s3.create-bucket stays false).
+#
+# DEVELOPMENT CREDENTIALS ONLY. The Garage S3 key and the Grafana admin
+# password default to throwaway dev values and can be overridden with
+# PARKANA_DEV_GARAGE_KEY_ID / PARKANA_DEV_GARAGE_KEY_SECRET /
+# GRAFANA_ADMIN_PASSWORD (e.g. via a .env file next to this compose file).
+# Grafana anonymous admin is enabled for this local stack only; never reuse
+# this compose file as a production deployment.
+#
+# DuckDB e2e (scripts/e2e-phase1.sh) reads Garage from the host as:
+# SET s3_region='garage'; SET s3_url_style='path'; SET s3_use_ssl=false;
+# ENDPOINT 'localhost:3900'.
+
+name: parkana-phase1
+
+services:
+  garage:
+    build:
+      context: .
+      dockerfile: garage.Dockerfile
+      args:
+        GARAGE_IMAGE: ${GARAGE_IMAGE:-docker.io/dxflrs/garage:v2.5.0@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5}
+    image: parkana-garage:v2.5.0
+    command: ["/usr/local/bin/garage", "server"]
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    ports:
+      # S3 API; DuckDB httpfs reads it from the host in the e2e script. Bound
+      # to loopback; PARKANA_S3_PORT keeps parallel stacks from colliding.
+      - "127.0.0.1:${PARKANA_S3_PORT:-3900}:3900"
+    healthcheck:
+      # `garage health` is the binary's own cluster probe and exits nonzero
+      # while the cluster is unavailable. On a fresh cluster that is the case
+      # until garage-init has applied the layout, so the retry window spans
+      # the init job (parkana additionally waits for init's exit below).
+      test: ["CMD", "/usr/local/bin/garage", "-c", "/etc/garage.toml", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  # One-shot job: layout + dev key + parkana bucket. Safe on existing volumes.
+  # Ordered after `service_started`, not `service_healthy`: on a fresh cluster
+  # the daemon is only healthy after a layout is applied, which is exactly
+  # what this job does; the script itself retries until the RPC answers.
+  garage-init:
+    image: parkana-garage:v2.5.0
+    # The image is built by the `garage` service above (same image name); don't
+    # try to pull it from a registry before that build has run.
+    pull_policy: never
+    depends_on:
+      garage:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-ce"]
+    command: ["/usr/local/bin/garage-init.sh"]
+    environment:
+      GARAGE_CONFIG: /etc/garage.toml
+      GARAGE_BUCKET: parkana
+      GARAGE_KEY_NAME: parkana-dev
+      GARAGE_KEY_ID: ${PARKANA_DEV_GARAGE_KEY_ID:-GK5c7e9a3b1d8f2e6c4a0b9d8f}
+      GARAGE_KEY_SECRET: ${PARKANA_DEV_GARAGE_KEY_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      # Read-only: the CLI reads node_key.pub here to find the daemon when no
+      # -h/--rpc-host is given (garage main.rs). The helper's retry loop
+      # tolerates this mount being empty for the first moments after startup.
+      - garage-meta:/var/lib/garage/meta:ro
+    restart: "no"
+
+  parkana:
+    build:
+      # Repository root, relative to this compose file (compose resolves
+      # build.context against the project directory, not the caller's cwd).
+      context: ../..
+      dockerfile: Dockerfile
+    image: parkana:phase1
+    environment:
+      PARKANA_ROLES: all
+      PARKANA_HTTP_ADDR: ":3100"
+      PARKANA_DATA_DIR: /data
+      # Object storage: Garage over plain HTTP inside the compose network.
+      # Bucket creation stays Parkana-side-off: garage-init owns the bucket.
+      PARKANA_STORAGE_BACKEND: s3
+      PARKANA_STORAGE_S3_ENDPOINT: garage:3900
+      PARKANA_STORAGE_S3_BUCKET: parkana
+      PARKANA_STORAGE_S3_REGION: garage
+      # garage-init owns the bucket; Parkana must never create it.
+      PARKANA_STORAGE_S3_CREATE_BUCKET: "false"
+      PARKANA_STORAGE_S3_ACCESS_KEY: ${PARKANA_DEV_GARAGE_KEY_ID:-GK5c7e9a3b1d8f2e6c4a0b9d8f}
+      PARKANA_STORAGE_S3_SECRET_KEY: ${PARKANA_DEV_GARAGE_KEY_SECRET:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      PARKANA_STORAGE_S3_INSECURE: "true"
+      # Catalog: SQLite file inside the persistent volume.
+      PARKANA_CATALOG_DRIVER: sqlite
+      PARKANA_CATALOG_DSN: /data/catalog.db
+      # Short thresholds so the smoke tests see flush/upload quickly. The e2e
+      # script overrides each one per phase and then asserts the effective
+      # container env, so keep the full PARKANA_INGEST_*/PARKANA_COMPACTOR_*
+      # names here. upload-max-age is 30s per PLAN.md decision 9: queries see
+      # data only after the ingester uploads and catalogs it.
+      PARKANA_INGEST_FLUSH_INTERVAL: ${PARKANA_INGEST_FLUSH_INTERVAL:-2s}
+      PARKANA_INGEST_UPLOAD_INTERVAL: ${PARKANA_INGEST_UPLOAD_INTERVAL:-2s}
+      PARKANA_INGEST_UPLOAD_MIN: ${PARKANA_INGEST_UPLOAD_MIN:-1MiB}
+      PARKANA_INGEST_UPLOAD_MAX_AGE: ${PARKANA_INGEST_UPLOAD_MAX_AGE:-30s}
+      PARKANA_COMPACTOR_INTERVAL: ${PARKANA_COMPACTOR_INTERVAL:-10s}
+      PARKANA_COMPACTOR_TARGET_SIZE: ${PARKANA_COMPACTOR_TARGET_SIZE:-16MiB}
+      PARKANA_COMPACTOR_DELETE_DELAY: ${PARKANA_COMPACTOR_DELETE_DELAY:-30s}
+    ports:
+      - "127.0.0.1:${PARKANA_HTTP_PORT:-3100}:3100"
+    volumes:
+      - parkana-data:/data
+    depends_on:
+      garage:
+        condition: service_healthy
+      garage-init:
+        condition: service_completed_successfully
+    # Give the ingester time to seal and flush on SIGTERM before SIGKILL.
+    stop_grace_period: 30s
+    restart: unless-stopped
+    # Readiness: the image's HEALTHCHECK curls /ready (200 once the server is
+    # serving and all role checks pass), so no compose-level override here.
+
+  # ---------------------------------------------------------------------------
+  # Phase 2 read stack. Enable with `--profile phase2`.
+  # ---------------------------------------------------------------------------
+
+  loki:
+    profiles: ["phase2"]
+    image: ${LOKI_IMAGE:-grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28}
+    # Single binary, filesystem storage, structured metadata enabled. The
+    # pinned image is distroless (no shell/curl), so the readiness probe is
+    # performed by deploy/compose/validate-phase2.sh from the host.
+    command: ["-config.file=/etc/loki/config.yaml"]
+    user: "10001:10001"
+    volumes:
+      - ./loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    ports:
+      # HTTP API only; the gRPC port stays inside the compose network.
+      - "127.0.0.1:${LOKI_HTTP_PORT:-3101}:3100"
+    restart: unless-stopped
+
+  alloy:
+    profiles: ["phase2"]
+    image: ${ALLOY_IMAGE:-grafana/alloy:v1.21.3@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4}
+    # The Alloy image defaults to root. Run as its packaged uid/gid; the named
+    # storage volume inherits the image directory's ownership on first mount.
+    user: "473:473"
+    command: ["run", "/etc/alloy/config.alloy", "--storage.path=/var/lib/alloy/data", "--server.http.listen-addr=0.0.0.0:12345"]
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+    ports:
+      - "127.0.0.1:${ALLOY_HTTP_PORT:-12345}:12345"
+    depends_on:
+      loki:
+        condition: service_started
+      parkana:
+        condition: service_healthy
+    restart: unless-stopped
+    # Alloy's HTTP UI/API has /-/ready, but the image ships no curl/wget. The
+    # generator entrypoint waits on the loki.source.api /ready endpoint, and
+    # validate-phase2.sh probes Alloy's own endpoint from the host.
+
+  grafana:
+    profiles: ["phase2"]
+    image: ${GRAFANA_IMAGE:-grafana/grafana:13.3.0@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205}
+    environment:
+      # Local development only: anonymous access with the Admin role and a
+      # throwaway admin password. Provisioned datasources are read-only.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_NAME: "Main Org."
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      # Grafana 13.3.0 does not bundle the Loki datasource; without a pin it
+      # preinstalls `loki` (latest) from grafana.com at startup. Pin the exact
+      # plugin version synchronously so provisioning sees it before Grafana
+      # starts and a later catalog release cannot change the comparison. The
+      # URL is the official download endpoint for that version.
+      GF_PLUGINS_PREINSTALL_SYNC: "loki@13.2.5@https://grafana.com/api/plugins/loki/versions/13.2.5/download"
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: "false"
+      GF_PLUGINS_CHECK_FOR_PLUGIN_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_HTTP_PORT:-3000}:3000"
+    depends_on:
+      loki:
+        condition: service_started
+      parkana:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  # Finite base corpus: 20000 lines across service_name=api and
+  # service_name=web, shared labels job=frontend, env=dev, level=info. The
+  # existing pushgen line format is `id=<n> stream=<name>` (logfmt-parseable).
+  # Line counts are variables so the corpus run remains configurable; the
+  # expected total is base+job+corpus (22200 by default).
+  pushgen-base:
+    profiles: ["phase2"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: pushgen
+    image: parkana-pushgen:phase2
+    environment:
+      PUSHGEN_READY_URL: http://alloy:3100/ready
+      PARKANA_GENERATOR_BASE_TOTAL: ${PARKANA_GENERATOR_BASE_TOTAL:-20000}
+      PARKANA_GENERATOR_JOB_TOTAL: ${PARKANA_GENERATOR_JOB_TOTAL:-1000}
+      PARKANA_GENERATOR_CORPUS_TOTAL: ${PARKANA_GENERATOR_CORPUS_TOTAL:-1200}
+    command:
+      - "-url=http://alloy:3100/loki/api/v1/push"
+      - "-format=json"
+      - "-stream=api"
+      - "-stream=web"
+      - "-label=job=frontend"
+      - "-label=env=dev"
+      - "-label=level=info"
+      - "-total=${PARKANA_GENERATOR_BASE_TOTAL:-20000}"
+      - "-rate=${PARKANA_GENERATOR_RATE:-1000}"
+      - "-batch=${PARKANA_GENERATOR_BATCH:-100}"
+    depends_on:
+      alloy:
+        condition: service_started
+    restart: "no"
+
+  # Finite corpus: the deterministic part A comparison fixture (1200 lines).
+  # It adds format/level/pod stream labels per record and trace_id/request_id
+  # structured metadata; JSON/logfmt/plain line mix. Breakdown for one run:
+  # json 423, logfmt 384, plain 393; info 448, warn 413, error 339; pod-a/
+  # pod-b; every line carries trace_id and request_id metadata.
+  pushgen-corpus:
+    profiles: ["phase2"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: pushgen
+    image: parkana-pushgen:phase2
+    environment:
+      PUSHGEN_READY_URL: http://alloy:3100/ready
+    command:
+      - "-url=http://alloy:3100/loki/api/v1/push"
+      - "-profile=corpus"
+      - "-format=json"
+      - "-stream=corpus"
+      - "-label=job=corpus"
+      - "-label=env=dev"
+      - "-total=${PARKANA_GENERATOR_CORPUS_TOTAL:-1200}"
+      - "-rate=${PARKANA_GENERATOR_RATE:-1000}"
+      - "-batch=${PARKANA_GENERATOR_BATCH:-100}"
+    depends_on:
+      alloy:
+        condition: service_started
+    restart: "no"
+
+  # Finite job-only corpus: 1000 lines under job=legacy and no service_name,
+  # so Parkana's stream-name fallback (service_name then job) is exercised.
+  pushgen-job:
+    profiles: ["phase2"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: pushgen
+    image: parkana-pushgen:phase2
+    environment:
+      PUSHGEN_READY_URL: http://alloy:3100/ready
+    command:
+      - "-url=http://alloy:3100/loki/api/v1/push"
+      - "-format=json"
+      - "-stream=legacy"
+      - "-stream-label=job"
+      - "-label=env=dev"
+      - "-total=${PARKANA_GENERATOR_JOB_TOTAL:-1000}"
+      - "-rate=${PARKANA_GENERATOR_RATE:-1000}"
+      - "-batch=${PARKANA_GENERATOR_BATCH:-100}"
+    depends_on:
+      alloy:
+        condition: service_started
+    restart: "no"
+
+volumes:
+  garage-meta:
+  garage-data:
+  parkana-data:
+  loki-data:
+  alloy-data:
+  grafana-data:

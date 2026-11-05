@@ -1,0 +1,267 @@
+# HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 3.9804e-05
+go_gc_duration_seconds{quantile="0.25"} 6.8278e-05
+go_gc_duration_seconds{quantile="0.5"} 0.000109976
+go_gc_duration_seconds{quantile="0.75"} 0.000149791
+go_gc_duration_seconds{quantile="1"} 0.004286781
+go_gc_duration_seconds_sum 0.123549349
+go_gc_duration_seconds_count 620
+# HELP go_gc_gogc_percent Heap size target percentage configured by the user, otherwise 100. This value is set by the GOGC environment variable, and the runtime/debug.SetGCPercent function. Sourced from /gc/gogc:percent.
+# TYPE go_gc_gogc_percent gauge
+go_gc_gogc_percent 100
+# HELP go_gc_gomemlimit_bytes Go runtime memory limit configured by the user, otherwise math.MaxInt64. This value is set by the GOMEMLIMIT environment variable, and the runtime/debug.SetMemoryLimit function. Sourced from /gc/gomemlimit:bytes.
+# TYPE go_gc_gomemlimit_bytes gauge
+go_gc_gomemlimit_bytes 9.223372036854776e+18
+# HELP go_goroutines Number of goroutines that currently exist.
+# TYPE go_goroutines gauge
+go_goroutines 28
+# HELP go_info Information about the Go environment.
+# TYPE go_info gauge
+go_info{version="go1.27.3"} 1
+# HELP go_memstats_alloc_bytes Number of bytes allocated in heap and currently in use. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_alloc_bytes gauge
+go_memstats_alloc_bytes 3.6837664e+08
+# HELP go_memstats_alloc_bytes_total Total number of bytes allocated in heap until now, even if released already. Equals to /gc/heap/allocs:bytes.
+# TYPE go_memstats_alloc_bytes_total counter
+go_memstats_alloc_bytes_total 1.07965163592e+11
+# HELP go_memstats_buck_hash_sys_bytes Number of bytes used by the profiling bucket hash table. Equals to /memory/classes/profiling/buckets:bytes.
+# TYPE go_memstats_buck_hash_sys_bytes gauge
+go_memstats_buck_hash_sys_bytes 1.447097e+06
+# HELP go_memstats_frees_total Total number of heap objects frees. Equals to /gc/heap/frees:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_frees_total counter
+go_memstats_frees_total 4.64964551e+08
+# HELP go_memstats_gc_sys_bytes Number of bytes used for garbage collection system metadata. Equals to /memory/classes/metadata/other:bytes.
+# TYPE go_memstats_gc_sys_bytes gauge
+go_memstats_gc_sys_bytes 8.295872e+06
+# HELP go_memstats_heap_alloc_bytes Number of heap bytes allocated and currently in use, same as go_memstats_alloc_bytes. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_heap_alloc_bytes gauge
+go_memstats_heap_alloc_bytes 3.6837664e+08
+# HELP go_memstats_heap_idle_bytes Number of heap bytes waiting to be used. Equals to /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_idle_bytes gauge
+go_memstats_heap_idle_bytes 4.81411072e+08
+# HELP go_memstats_heap_inuse_bytes Number of heap bytes that are in use. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes
+# TYPE go_memstats_heap_inuse_bytes gauge
+go_memstats_heap_inuse_bytes 3.77143296e+08
+# HELP go_memstats_heap_objects Number of currently allocated objects. Equals to /gc/heap/objects:objects.
+# TYPE go_memstats_heap_objects gauge
+go_memstats_heap_objects 755889
+# HELP go_memstats_heap_released_bytes Number of heap bytes released to OS. Equals to /memory/classes/heap/released:bytes.
+# TYPE go_memstats_heap_released_bytes gauge
+go_memstats_heap_released_bytes 4.2262528e+08
+# HELP go_memstats_heap_sys_bytes Number of heap bytes obtained from system. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes + /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_sys_bytes gauge
+go_memstats_heap_sys_bytes 8.58554368e+08
+# HELP go_memstats_last_gc_time_seconds Number of seconds since 1970 of last garbage collection.
+# TYPE go_memstats_last_gc_time_seconds gauge
+go_memstats_last_gc_time_seconds 1.7938236413447921e+09
+# HELP go_memstats_mallocs_total Total number of heap objects allocated, both live and gc-ed. Semantically a counter version for go_memstats_heap_objects gauge. Equals to /gc/heap/allocs:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_mallocs_total counter
+go_memstats_mallocs_total 4.6572044e+08
+# HELP go_memstats_mcache_inuse_bytes Number of bytes in use by mcache structures. Equals to /memory/classes/metadata/mcache/inuse:bytes.
+# TYPE go_memstats_mcache_inuse_bytes gauge
+go_memstats_mcache_inuse_bytes 9184
+# HELP go_memstats_mcache_sys_bytes Number of bytes used for mcache structures obtained from system. Equals to /memory/classes/metadata/mcache/inuse:bytes + /memory/classes/metadata/mcache/free:bytes.
+# TYPE go_memstats_mcache_sys_bytes gauge
+go_memstats_mcache_sys_bytes 16072
+# HELP go_memstats_mspan_inuse_bytes Number of bytes in use by mspan structures. Equals to /memory/classes/metadata/mspan/inuse:bytes.
+# TYPE go_memstats_mspan_inuse_bytes gauge
+go_memstats_mspan_inuse_bytes 1.26192e+06
+# HELP go_memstats_mspan_sys_bytes Number of bytes used for mspan structures obtained from system. Equals to /memory/classes/metadata/mspan/inuse:bytes + /memory/classes/metadata/mspan/free:bytes.
+# TYPE go_memstats_mspan_sys_bytes gauge
+go_memstats_mspan_sys_bytes 4.22688e+06
+# HELP go_memstats_next_gc_bytes Number of heap bytes when next garbage collection will take place. Equals to /gc/heap/goal:bytes.
+# TYPE go_memstats_next_gc_bytes gauge
+go_memstats_next_gc_bytes 3.7704269e+08
+# HELP go_memstats_other_sys_bytes Number of bytes used for other system allocations. Equals to /memory/classes/other:bytes.
+# TYPE go_memstats_other_sys_bytes gauge
+go_memstats_other_sys_bytes 1.229143e+06
+# HELP go_memstats_stack_inuse_bytes Number of bytes obtained from system for stack allocator in non-CGO environments. Equals to /memory/classes/heap/stacks:bytes.
+# TYPE go_memstats_stack_inuse_bytes gauge
+go_memstats_stack_inuse_bytes 1.212416e+06
+# HELP go_memstats_stack_sys_bytes Number of bytes obtained from system for stack allocator. Equals to /memory/classes/heap/stacks:bytes + /memory/classes/os-stacks:bytes.
+# TYPE go_memstats_stack_sys_bytes gauge
+go_memstats_stack_sys_bytes 1.212416e+06
+# HELP go_memstats_sys_bytes Number of bytes obtained from system. Equals to /memory/classes/total:byte.
+# TYPE go_memstats_sys_bytes gauge
+go_memstats_sys_bytes 8.74981848e+08
+# HELP go_sched_gomaxprocs_threads The current runtime.GOMAXPROCS setting, or the number of operating system threads that can execute user-level Go code simultaneously. Sourced from /sched/gomaxprocs:threads.
+# TYPE go_sched_gomaxprocs_threads gauge
+go_sched_gomaxprocs_threads 4
+# HELP go_threads Number of OS threads created.
+# TYPE go_threads gauge
+go_threads 14
+# HELP parkana_http_request_duration_seconds HTTP request latency by route pattern.
+# TYPE parkana_http_request_duration_seconds histogram
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="0.001"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="0.004"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="0.016"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="0.064"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="0.256"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="1.024"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="4.096"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="16.384"} 9
+parkana_http_request_duration_seconds_bucket{route="GET /ready",le="+Inf"} 9
+parkana_http_request_duration_seconds_sum{route="GET /ready"} 0.000227948
+parkana_http_request_duration_seconds_count{route="GET /ready"} 9
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="0.001"} 0
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="0.004"} 0
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="0.016"} 0
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="0.064"} 876
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="0.256"} 10268
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="1.024"} 10512
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="4.096"} 10512
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="16.384"} 10512
+parkana_http_request_duration_seconds_bucket{route="POST /loki/api/v1/push",le="+Inf"} 10512
+parkana_http_request_duration_seconds_sum{route="POST /loki/api/v1/push"} 1250.9078114560039
+parkana_http_request_duration_seconds_count{route="POST /loki/api/v1/push"} 10512
+# HELP parkana_http_requests_total HTTP requests by route pattern and status code.
+# TYPE parkana_http_requests_total counter
+parkana_http_requests_total{code="200",route="GET /ready"} 9
+parkana_http_requests_total{code="204",route="POST /loki/api/v1/push"} 10512
+# HELP parkana_index_build_duration_seconds Sidecar index build latency for finished builds (successful or over the gram cap), by write path.
+# TYPE parkana_index_build_duration_seconds histogram
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.005"} 0
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.02"} 0
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.08"} 0
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.32"} 0
+parkana_index_build_duration_seconds_bucket{source="ingest",le="1.28"} 4
+parkana_index_build_duration_seconds_bucket{source="ingest",le="5.12"} 6
+parkana_index_build_duration_seconds_bucket{source="ingest",le="20.48"} 6
+parkana_index_build_duration_seconds_bucket{source="ingest",le="81.92"} 6
+parkana_index_build_duration_seconds_bucket{source="ingest",le="+Inf"} 6
+parkana_index_build_duration_seconds_sum{source="ingest"} 8.560198599
+parkana_index_build_duration_seconds_count{source="ingest"} 6
+# HELP parkana_index_built_total Sidecar index builds that returned encoded bytes, by write path.
+# TYPE parkana_index_built_total counter
+parkana_index_built_total{source="ingest"} 6
+# HELP parkana_index_bytes_total Encoded sidecar bytes produced by successful index builds, by write path.
+# TYPE parkana_index_bytes_total counter
+parkana_index_bytes_total{source="ingest"} 690608
+# HELP parkana_ingest_bytes_total Decoded push bytes admitted into the ingest memtable.
+# TYPE parkana_ingest_bytes_total counter
+parkana_ingest_bytes_total{tenant="default"} 2.000281196e+09
+# HELP parkana_ingest_flush_total Local Parquet generation publications by result.
+# TYPE parkana_ingest_flush_total counter
+parkana_ingest_flush_total{result="ok"} 44
+# HELP parkana_ingest_lines_total Log lines admitted into the ingest memtable.
+# TYPE parkana_ingest_lines_total counter
+parkana_ingest_lines_total{tenant="default"} 1.3129764e+07
+# HELP parkana_ingest_pending_generations Sealed generations awaiting local publication.
+# TYPE parkana_ingest_pending_generations gauge
+parkana_ingest_pending_generations{tenant="default"} 0
+# HELP parkana_ingest_upload_bytes_total Object bytes published to the object store per tenant.
+# TYPE parkana_ingest_upload_bytes_total counter
+parkana_ingest_upload_bytes_total{tenant="default"} 6.2739149e+07
+# HELP parkana_ingest_upload_files_total Objects published to the object store per tenant.
+# TYPE parkana_ingest_upload_files_total counter
+parkana_ingest_upload_files_total{tenant="default"} 4
+# HELP parkana_ingest_upload_rows_total Rows published to the object store per tenant.
+# TYPE parkana_ingest_upload_rows_total counter
+parkana_ingest_upload_rows_total{tenant="default"} 1.99375e+06
+# HELP parkana_ingest_upload_total Object store upload passes by result.
+# TYPE parkana_ingest_upload_total counter
+parkana_ingest_upload_total{result="ok"} 14
+# HELP parkana_ingest_wal_errors_total WAL segment file sync failures.
+# TYPE parkana_ingest_wal_errors_total counter
+parkana_ingest_wal_errors_total 0
+# HELP parkana_ingest_wal_fsync_seconds WAL segment file sync latency.
+# TYPE parkana_ingest_wal_fsync_seconds histogram
+parkana_ingest_wal_fsync_seconds_bucket{le="0.0001"} 0
+parkana_ingest_wal_fsync_seconds_bucket{le="0.0004"} 0
+parkana_ingest_wal_fsync_seconds_bucket{le="0.0016"} 0
+parkana_ingest_wal_fsync_seconds_bucket{le="0.0064"} 0
+parkana_ingest_wal_fsync_seconds_bucket{le="0.0256"} 94
+parkana_ingest_wal_fsync_seconds_bucket{le="0.1024"} 1295
+parkana_ingest_wal_fsync_seconds_bucket{le="0.4096"} 1363
+parkana_ingest_wal_fsync_seconds_bucket{le="1.6384"} 1366
+parkana_ingest_wal_fsync_seconds_bucket{le="6.5536"} 1366
+parkana_ingest_wal_fsync_seconds_bucket{le="26.2144"} 1366
+parkana_ingest_wal_fsync_seconds_bucket{le="+Inf"} 1366
+parkana_ingest_wal_fsync_seconds_sum 79.80983678999996
+parkana_ingest_wal_fsync_seconds_count 1366
+# HELP parkana_querier_cache_bytes Bytes currently occupied by cached objects.
+# TYPE parkana_querier_cache_bytes gauge
+parkana_querier_cache_bytes 0
+# HELP parkana_querier_cache_downloads_total Remote object downloads by result.
+# TYPE parkana_querier_cache_downloads_total counter
+parkana_querier_cache_downloads_total{result="error"} 0
+parkana_querier_cache_downloads_total{result="success"} 0
+# HELP parkana_querier_cache_entries Cached objects currently indexed.
+# TYPE parkana_querier_cache_entries gauge
+parkana_querier_cache_entries 0
+# HELP parkana_querier_cache_evictions_total Cached objects evicted to stay within the byte budget.
+# TYPE parkana_querier_cache_evictions_total counter
+parkana_querier_cache_evictions_total 0
+# HELP parkana_querier_cache_fetched_bytes_total Serialized object bytes copied from the object store into the cache, partial failed copies included; local-path hits copy nothing and do not count. Candidate transfer bytes, not physical disk reads.
+# TYPE parkana_querier_cache_fetched_bytes_total counter
+parkana_querier_cache_fetched_bytes_total 0
+# HELP parkana_querier_cache_leases Object cache leases currently held by callers.
+# TYPE parkana_querier_cache_leases gauge
+parkana_querier_cache_leases 0
+# HELP parkana_querier_cache_requests_total Object cache acquisitions by result.
+# TYPE parkana_querier_cache_requests_total counter
+parkana_querier_cache_requests_total{result="hit"} 0
+parkana_querier_cache_requests_total{result="local"} 0
+parkana_querier_cache_requests_total{result="miss"} 0
+# HELP parkana_querier_sidecar_cache_bytes Accounted decoded bytes currently resident in the sidecar cache.
+# TYPE parkana_querier_sidecar_cache_bytes gauge
+parkana_querier_sidecar_cache_bytes 0
+# HELP parkana_querier_sidecar_cache_entries Decoded sidecars currently admitted in the sidecar cache.
+# TYPE parkana_querier_sidecar_cache_entries gauge
+parkana_querier_sidecar_cache_entries 0
+# HELP parkana_querier_sidecar_cache_evictions_total Decoded sidecars evicted to stay within the resident byte budget.
+# TYPE parkana_querier_sidecar_cache_evictions_total counter
+parkana_querier_sidecar_cache_evictions_total 0
+# HELP parkana_querier_sidecar_cache_fetched_bytes_total Serialized sidecar bytes read from the object store.
+# TYPE parkana_querier_sidecar_cache_fetched_bytes_total counter
+parkana_querier_sidecar_cache_fetched_bytes_total 0
+# HELP parkana_querier_sidecar_cache_fetches_total Sidecar fetch/decode attempts by result.
+# TYPE parkana_querier_sidecar_cache_fetches_total counter
+parkana_querier_sidecar_cache_fetches_total{result="decode_error"} 0
+parkana_querier_sidecar_cache_fetches_total{result="fetch_error"} 0
+parkana_querier_sidecar_cache_fetches_total{result="oversized"} 0
+parkana_querier_sidecar_cache_fetches_total{result="success"} 0
+# HELP parkana_querier_sidecar_cache_requests_total Sidecar cache lookups by result.
+# TYPE parkana_querier_sidecar_cache_requests_total counter
+parkana_querier_sidecar_cache_requests_total{result="hit"} 0
+parkana_querier_sidecar_cache_requests_total{result="miss"} 0
+# HELP parkana_query_bytes_scanned_total Compressed catalog file bytes submitted to DuckDB across query read attempts, failed attempts included; candidate bytes, not physical reads.
+# TYPE parkana_query_bytes_scanned_total counter
+parkana_query_bytes_scanned_total 0
+# HELP parkana_query_files_total Catalog files entering query read attempts by result: scanned (submitted to DuckDB), pruned_index (dropped by search sidecars), pruned_labels (dropped by complete label summaries).
+# TYPE parkana_query_files_total counter
+parkana_query_files_total{result="pruned_index"} 0
+parkana_query_files_total{result="pruned_labels"} 0
+parkana_query_files_total{result="scanned"} 0
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 92.8
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds 524287
+# HELP process_network_receive_bytes_total Number of bytes received by the process over the network.
+# TYPE process_network_receive_bytes_total counter
+process_network_receive_bytes_total 2.476407566e+09
+# HELP process_network_transmit_bytes_total Number of bytes sent by the process over the network.
+# TYPE process_network_transmit_bytes_total counter
+process_network_transmit_bytes_total 1.47752055e+08
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 40
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 5.17046272e+08
+# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE process_start_time_seconds gauge
+process_start_time_seconds 1.79382355674e+09
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes 4.667301888e+09
+# HELP process_virtual_memory_max_bytes Maximum amount of virtual memory available in bytes.
+# TYPE process_virtual_memory_max_bytes gauge
+process_virtual_memory_max_bytes 1.8446744073709552e+19
+# HELP promhttp_metric_handler_errors_total Total number of internal errors encountered by the promhttp metric handler.
+# TYPE promhttp_metric_handler_errors_total counter
+promhttp_metric_handler_errors_total{cause="encoding"} 0
+promhttp_metric_handler_errors_total{cause="gathering"} 0

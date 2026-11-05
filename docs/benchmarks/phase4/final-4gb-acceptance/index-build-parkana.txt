@@ -1,0 +1,11 @@
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.005"} 0
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.02"} 0
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.08"} 3
+parkana_index_build_duration_seconds_bucket{source="ingest",le="0.32"} 4
+parkana_index_build_duration_seconds_bucket{source="ingest",le="1.28"} 8
+parkana_index_build_duration_seconds_bucket{source="ingest",le="5.12"} 20
+parkana_index_build_duration_seconds_bucket{source="ingest",le="20.48"} 20
+parkana_index_build_duration_seconds_bucket{source="ingest",le="81.92"} 20
+parkana_index_build_duration_seconds_bucket{source="ingest",le="+Inf"} 20
+parkana_index_build_duration_seconds_sum{source="ingest"} 31.529428415999995
+parkana_index_build_duration_seconds_count{source="ingest"} 20

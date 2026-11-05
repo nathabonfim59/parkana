@@ -1,0 +1,6 @@
+{
+  "original_run": "FAILED",
+  "failure": "publication completed-pass sample about443.7s after ACK, exceeds120s; repeated original count attempts canceled at120s",
+  "diagnostic_count": "separate bounded request, not the original visibility or query workload",
+  "stopped_unix": 1793860196.8678153
+}

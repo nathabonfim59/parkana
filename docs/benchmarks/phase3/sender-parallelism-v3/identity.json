@@ -1,0 +1,15 @@
+{
+  "source_commit": "fe7a39f2a65784e57acba0eb5c6177b33e2d9ec4",
+  "source_dirty": 1,
+  "server_production_source_commit": "33f7b1747653f77b5295fe36050b34c51aa34d8a",
+  "server_image_id": "sha256:afcfd0bd3a26d098ba47f0399f9a55f465a7e620d90f837e86311d0320f338a9",
+  "server_source_delta": "none: relay changes cmd/parkbench and benchmark script only",
+  "parkbench_sha256": "d7363cb4979efbf9c89c2be6955a4b9d67e80ca350ca684817f36fc6f4f7136b",
+  "vm": "bx_5r4q5pb7",
+  "type": "large",
+  "container_cpus": 4,
+  "container_memory": "8g",
+  "batch_override": false,
+  "default_instances_override": false,
+  "skip_queries": true
+}

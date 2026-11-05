@@ -1,0 +1,91 @@
+{
+  "arm": "hot",
+  "vm": "bx_xasjdrqq",
+  "exit_line": "tm-boat: exit 0 (command 218s, total 228s)",
+  "archive_sha256": "13a33bd14dbcd3017e4cf9abb9d947e3c20d517eaf2b18835b81d1843bbf2186",
+  "archive_bytes": 26050,
+  "result": {
+    "arm": "hot",
+    "target_raw_line_bytes": 4000000000,
+    "whole_run_wall_s": 226.8965413570404,
+    "exit_code": 0,
+    "ack_MBps": 129.28456871948407,
+    "queryable_delay_s": 109.702,
+    "through_MBps": 28.441107219833565,
+    "memory_peak_bytes": 8466714624.0,
+    "oom_kill": 0.0,
+    "ack_window_cpu_usec": 101227322.0,
+    "receipt_admitted_attempts": 3,
+    "clamped_admitted_attempts": 0,
+    "exact_restart_lines": 26554577,
+    "receipt_source_bytes_max": 540318525,
+    "checks": {
+      "command_exit": true,
+      "wall_within_900s": true,
+      "exact_raw_bytes": true,
+      "clean_delivery": true,
+      "exact_manifest_lines": true,
+      "exact_queryable_count": true,
+      "exact_restart_count": true,
+      "corpus_shape": true,
+      "resources": true,
+      "always_F4_U4": true,
+      "no_oom": true,
+      "memory_peak": true,
+      "sidecars": true,
+      "admission_metrics": true,
+      "resolved_budget": true,
+      "actual_receipt_bytes": true
+    },
+    "timing_targets": {
+      "ack_at_least_38_8": true,
+      "delay_at_most_120": true,
+      "through_at_least_31": false
+    },
+    "operational_pass": true,
+    "decision14_pass": null,
+    "hot_one_hour": true,
+    "size_caveat": "Rates are for the actual size above; historical phase3 used25GB. Hot timing is separate from four-stream acceptance."
+  },
+  "budgets": [
+    {
+      "bytes": 4294967296,
+      "source": "cgroup"
+    },
+    {
+      "bytes": 4294967296,
+      "source": "cgroup"
+    }
+  ],
+  "metrics": {
+    "parkana_upload_active_jobs": 1.0,
+    "parkana_upload_inflight_estimate_bytes": 463623680.0,
+    "parkana_upload_job_source_bytes_sum": 800868992.0,
+    "parkana_upload_job_source_bytes_count": 3.0,
+    "parkana_upload_merge_seconds_sum": 100.67507425299999,
+    "parkana_upload_merge_seconds_count": 3.0,
+    "parkana_upload_oversized_jobs_total": 0.0
+  },
+  "receipt_source_bytes": [
+    137448537,
+    540318525,
+    123101930
+  ],
+  "estimate_bytes": [
+    378531840,
+    463623680,
+    372090880
+  ],
+  "charged_weight_bytes": [
+    378531840,
+    463623680,
+    372090880
+  ],
+  "malformed_records": 0,
+  "outcome": {
+    "benchmark_exit": 0,
+    "driver_exit": 0,
+    "cleanup_exit": 0,
+    "host_elapsed_before_export_s": 227.96494793891907
+  }
+}

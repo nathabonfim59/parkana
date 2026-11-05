@@ -1,0 +1,86 @@
+[
+  {
+    "name": "modifier-on",
+    "query": "sum by (level) (count_over_time({service_name=\"corpus\"}[5m])) + on(level) sum by (level) (count_over_time({service_name=\"corpus\"}[5m]))",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "modifier-ignoring",
+    "query": "sum by (level) (count_over_time({service_name=\"corpus\"}[5m])) + ignoring(pod) sum by (level) (count_over_time({service_name=\"corpus\"}[5m]))",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "modifier-group-left",
+    "query": "sum by (level) (count_over_time({service_name=\"corpus\"}[5m])) + on(level) group_left sum by (level) (count_over_time({service_name=\"corpus\"}[5m]))",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "modifier-group-right",
+    "query": "sum by (level) (count_over_time({service_name=\"corpus\"}[5m])) + on(level) group_right sum by (level) (count_over_time({service_name=\"corpus\"}[5m]))",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "set-or",
+    "query": "count_over_time({service_name=\"api\"}[5m]) or count_over_time({service_name=\"web\"}[5m])",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "set-and",
+    "query": "count_over_time({service_name=\"api\"}[5m]) and count_over_time({service_name=\"web\"}[5m])",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "set-unless",
+    "query": "count_over_time({service_name=\"api\"}[5m]) unless count_over_time({service_name=\"web\"}[5m])",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "stage-unpack",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | unpack",
+    "endpoint": "/loki/api/v1/query_range",
+    "params": {
+      "step": "5s"
+    },
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "stage-decolorize",
+    "query": "{service_name=\"corpus\", format=\"plain\"} | decolorize",
+    "endpoint": "/loki/api/v1/query_range",
+    "params": {
+      "step": "5s"
+    },
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  },
+  {
+    "name": "function-label-replace",
+    "query": "label_replace(sum by (level) (count_over_time({service_name=\"corpus\"}[5m])), \"dst\", \"$1\", \"level\", \"(.*)\")",
+    "endpoint": "/loki/api/v1/query",
+    "params": {},
+    "expectedStatus": 400,
+    "bodyContains": "unsupported"
+  }
+]

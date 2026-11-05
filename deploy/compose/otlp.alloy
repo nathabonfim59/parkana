@@ -1,0 +1,106 @@
+// Native OTLP tee for the Parkana comparison stack.
+//
+// Pinned Alloy v1.21.3 (the same tag and digest as the existing stack). This
+// file does not use loki.source.api or loki.write: the fixtures arrive as OTLP
+// and stay OTLP all the way to both stores, so the two converters being
+// compared are Loki's and Parkana's, not Alloy's translation.
+//
+// Source references for the pinned version:
+//   otelcol.receiver.otlp:
+//     https://github.com/grafana/alloy/blob/v1.21.3/internal/component/otelcol/receiver/otlp/otlp.go#L22
+//     HTTP defaults 0.0.0.0:4318 and /v1/logs: same file, lines 190-200.
+//     Accepted compression includes gzip: same file, line 200, and
+//     internal/component/otelcol/config_http.go line 50.
+//   otelcol.exporter.otlphttp:
+//     https://github.com/grafana/alloy/blob/v1.21.3/internal/component/otelcol/exporter/otlphttp/otlphttp.go#L22
+//     `logs_endpoint` overrides `client.endpoint` for logs and is used as
+//     given, with no automatic "/v1/logs" suffix: same file, lines 44-52 and
+//     the Convert assignment at line 96. `client.endpoint` is still required
+//     by the schema.
+//     Defaults are protobuf + gzip: same file, lines 63-72 and 139-150.
+//
+// The receiver fans every log record out to two independent exporter
+// consumers. Each exporter keeps its own bounded queue and retry policy. Both
+// requests carry the same X-Scope-OrgID header and the same native OTLP
+// resource/scope/record bytes; Alloy neither adds nor drops attributes.
+//
+// Target paths are exact because the stores expose different native paths:
+//   Loki:     /otlp/v1/logs
+//             https://github.com/grafana/loki/blob/v3.7.9/pkg/loki/modules.go#L422
+//   Parkana:  /v1/logs
+//             internal/lokiapi/lokiapi.go (OTLPLogs route)
+
+otelcol.receiver.otlp "parkana_phase4" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+
+  http {
+    endpoint = "0.0.0.0:4318"
+    // Explicit defaults, pinned so a future Alloy default cannot change the
+    // path the e2e sender probes.
+    logs_url_path            = "/v1/logs"
+    max_request_body_size    = "20MiB"
+    compression_algorithms   = ["", "gzip"]
+  }
+
+  output {
+    logs = [
+      otelcol.exporter.otlphttp.loki.input,
+      otelcol.exporter.otlphttp.parkana.input,
+    ]
+  }
+}
+
+otelcol.exporter.otlphttp "loki" {
+  client {
+    // Required by the component schema even though logs_endpoint is set.
+    endpoint    = "http://loki:3100/otlp"
+    compression = "gzip"
+    headers = {
+      "X-Scope-OrgID" = "default",
+    }
+  }
+  logs_endpoint = "http://loki:3100/otlp/v1/logs"
+  encoding      = "proto"
+
+  sending_queue {
+    enabled           = true
+    num_consumers     = 4
+    queue_size        = 1000
+    block_on_overflow = true
+  }
+
+  retry_on_failure {
+    enabled          = true
+    initial_interval = "250ms"
+    max_interval     = "5s"
+    max_elapsed_time = "60s"
+  }
+}
+
+otelcol.exporter.otlphttp "parkana" {
+  client {
+    endpoint    = "http://parkana:3100"
+    compression = "gzip"
+    headers = {
+      "X-Scope-OrgID" = "default",
+    }
+  }
+  logs_endpoint = "http://parkana:3100/v1/logs"
+  encoding      = "proto"
+
+  sending_queue {
+    enabled           = true
+    num_consumers     = 4
+    queue_size        = 1000
+    block_on_overflow = true
+  }
+
+  retry_on_failure {
+    enabled          = true
+    initial_interval = "250ms"
+    max_interval     = "5s"
+    max_elapsed_time = "60s"
+  }
+}

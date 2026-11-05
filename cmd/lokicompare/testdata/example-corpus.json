@@ -1,0 +1,60 @@
+[
+  {
+    "name": "logs-range",
+    "type": "range",
+    "query": "{job=\"corpus\"} |= \"error\"",
+    "params": {
+      "limit": "100",
+      "direction": "backward"
+    }
+  },
+  {
+    "name": "count-instant",
+    "type": "instant",
+    "query": "sum by (level) (count_over_time({job=\"corpus\"}[5m]))"
+  },
+  {
+    "name": "labels-set",
+    "type": "labels",
+    "query": "{job=\"corpus\"}"
+  },
+  {
+    "name": "label-values-service",
+    "type": "label_values",
+    "query": "{job=\"corpus\"}",
+    "params": {
+      "label": "service_name"
+    }
+  },
+  {
+    "name": "series-two-selectors",
+    "type": "series",
+    "query": "{job=\"corpus\"}",
+    "params": {
+      "match[]": [
+        "{job=\"frontend\"}"
+      ]
+    }
+  },
+  {
+    "name": "index-stats",
+    "type": "stats",
+    "query": "{job=\"corpus\"}"
+  },
+  {
+    "name": "index-volume",
+    "type": "volume",
+    "query": "{job=\"corpus\"}",
+    "params": {
+      "limit": "10"
+    }
+  },
+  {
+    "name": "index-volume-range",
+    "type": "volume_range",
+    "query": "{job=\"corpus\"}",
+    "params": {
+      "step": "60"
+    }
+  }
+]

@@ -1,0 +1,37 @@
+# Garage configuration for Parkana's phase 1 development stack.
+#
+# Single node, no replication: this only holds throwaway smoke-test data.
+# Reference: Garage v2 configuration manual
+# (https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/).
+#
+# DEVELOPMENT ONLY. The RPC secret below is a fixed throwaway value for the
+# local compose network; never reuse it anywhere real.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+
+# Durability: fsync metadata and data blocks before acknowledging writes, so
+# acknowledged pushes survive a SIGKILL (defaults are false upstream).
+metadata_fsync = true
+data_fsync = true
+
+# Single-node layout: every object is stored once on this node.
+replication_factor = 1
+
+# RPC (cluster) endpoints. The CLI resolves rpc_public_addr and connects to
+# it when --rpc-host is not given (garage main.rs), so the one-shot
+# garage-init container reaches the daemon through this address with the
+# shared rpc_secret below.
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "garage:3901"
+rpc_secret = "7061726b616e612d6761726167652d6465762d7270632d7365637265742d2121"
+
+[s3_api]
+# Parkana (-storage.s3.region) and the DuckDB e2e checks (REGION 'garage',
+# URL_STYLE 'path', USE_SSL 'false') both target this region.
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+[admin]
+# Admin API, reachable only inside the compose network.
+api_bind_addr = "[::]:3903"

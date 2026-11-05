@@ -1,0 +1,96 @@
+# Loki 3.7.9 benchmark configuration.
+#
+# This is the phase 2 configuration (deploy/compose/loki/config.yaml) with a
+# deliberately tiny, documented delta set. The phase 2 file stays untouched.
+# Everything not listed here (schema store/version, TSDB index prefix/period,
+# structured metadata, discovery/parser settings) is identical.
+#
+# Benchmark-only deltas from phase 2:
+#   1. common.storage filesystem -> storage_config.aws on Garage S3.
+#   2. schema_config object_store filesystem -> s3.
+#   3. tsdb_shipper active/cache directories under /loki (S3 index shipper).
+#   4. limits_config global and per-stream ingestion rates/bursts raised so the
+#      maximum-rate push measures the store, not Loki's default 4/6 MB global
+#      and 3/15 MB per-stream throttles.
+#   5. compactor interval raised to 24h (retention stays disabled) so no
+#      background compaction overlaps a query phase.
+#
+# The S3 bucket and credentials are injected by scripts/bench-phase3.sh as a
+# fresh per-run Garage key/bucket via -config.expand-env=true. They are never
+# written into this file.
+#
+# DEVELOPMENT ONLY: auth stays disabled exactly as in phase 2.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      # Delta 2: chunks/index live in the per-run Garage bucket.
+      object_store: s3
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  # Delta 3: TSDB shipper needs writable local staging directories even when
+  # the durable index lives in S3.
+  tsdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/index_cache
+  # Delta 1: the expanded S3 form from the pinned release docs.
+  aws:
+    bucketnames: ${LOKI_BENCH_S3_BUCKET}
+    endpoint: garage:3900
+    region: ${LOKI_BENCH_S3_REGION}
+    access_key_id: ${LOKI_BENCH_S3_ACCESS_KEY}
+    secret_access_key: ${LOKI_BENCH_S3_SECRET_KEY}
+    insecure: true
+    s3forcepathstyle: true
+
+limits_config:
+  # Phase 2 parity: accept structured metadata, expose the volume endpoints,
+  # and never invent level/service_name metadata that Parkana does not have.
+  allow_structured_metadata: true
+  volume_enabled: true
+  discover_log_levels: false
+  discover_service_name: []
+  # Delta 4: defaults (4 MB/s global, 6 MB burst; 3 MB/s per stream, 15 MB
+  # burst) would throttle the generator and silently turn the benchmark into a
+  # limit probe. The corpus uses four streams, so the per-stream limit would
+  # cap aggregate throughput well below the 31 MB/s target. These values are
+  # effectively unthrottled for this single-tenant VM run; the exact values are
+  # recorded in docs/benchmarks.md.
+  ingestion_rate_mb: 4096
+  ingestion_burst_size_mb: 4096
+  per_stream_rate_limit: 64MB
+  per_stream_rate_limit_burst: 64MB
+
+# Delta 5: no compaction work during a query phase. A single-node run still
+# registers the compactor module (target=all), so the interval is pushed out
+# and retention remains disabled.
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 24h
+  retention_enabled: false
+
+ruler:
+  alertmanager_url: http://localhost:9093
+
+analytics:
+  reporting_enabled: false

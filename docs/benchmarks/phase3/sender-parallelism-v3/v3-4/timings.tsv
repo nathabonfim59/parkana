@@ -1,0 +1,6 @@
+acknowledgment is parkbench ingest report elapsed_seconds; wall is first setup to last 204.
+queryable is the first exact count_over_time == ack_lines; polling adds up to 2s.
+flush is POST /flush to a drained queue plus an advancing, stable chunks_flushed_total with no flush failures.
+backend	ack_report_s	ack_wall_s	flush_s	queryable_delay_s
+parkana	376.826851813	376.851	null	23.535
+# loki skipped: --parkana-only (no Loki backend ran; no measurement is reported)

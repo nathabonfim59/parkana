@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "datasource",
+  "name": "Parkana SQL",
+  "id": "parkana-sql-datasource",
+  "metrics": true,
+  "backend": true,
+  "executable": "gpx_parkana_sql_datasource",
+  "info": {
+    "description": "Query Parkana logs with SQL",
+    "author": {
+      "name": "Parkana"
+    },
+    "keywords": ["datasource"],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=13.3.0",
+    "plugins": []
+  }
+}

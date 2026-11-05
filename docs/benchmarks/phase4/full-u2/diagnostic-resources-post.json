@@ -1,0 +1,6 @@
+{
+  "unix": 1793860063.0550556,
+  "scope": "after separate diagnostic count",
+  "raw_cgroup": "8589938688\nlow 0\nhigh 0\nmax 126456\noom 0\noom_kill 0\noom_group_kill 0\n2484948992\n",
+  "exit": 0
+}

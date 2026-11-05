@@ -1,0 +1,10 @@
+/bin/
+/data/
+*.test
+*.out
+*.prof
+/coverage.*
+# tty59 worktree state
+/.tty59/
+/dist/
+/.build/

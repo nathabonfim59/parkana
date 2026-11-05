@@ -1,0 +1,50 @@
+# Parkana phase 4 SQL overlay for the development stack.
+#
+# The base compose.yaml is shared by the phase 1/2 e2e scripts and is not
+# edited by this feature. Apply this overlay with the base file:
+#
+#   cd deploy/compose
+#   docker compose -f compose.yaml -f sql.yaml --profile phase2 \
+#     up -d garage garage-init parkana grafana
+#
+# Grafana keeps its phase 2 profile and its Loki/Parkana datasources; this
+# overlay adds the locally built Parkana SQL datasource plugin:
+#
+#   * the plugin is unsigned, so its ID is listed in
+#     GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS for this local stack only;
+#   * ../../grafana/parkana-datasource/dist is mounted read-only at the plugin
+#     directory Grafana scans. Build it first:
+#         (cd ../../grafana/parkana-datasource && scripts/build-frontend.sh)
+#         make -C ../../grafana/parkana-datasource backend
+#     scripts/e2e-phase4-sql.sh does both before starting the stack;
+#   * Grafana cannot take a nested file bind mount inside the base's read-only
+#     /etc/grafana/provisioning directory (Docker fails with "create mountpoint
+#     ... read-only file system"). Instead this overlay points Grafana at its
+#     own merged provisioning directory:
+#         deploy/compose/grafana-sql/provisioning
+#     mounted at /etc/grafana/provisioning-sql and selected with
+#     GF_PATHS_PROVISIONING. It carries a byte-identical copy of the base
+#     datasources/loki.yaml plus datasources/sql.yaml, so the base Loki and
+#     Parkana datasources are still provisioned. Keep the copy byte-identical;
+#     scripts/e2e-phase4-sql.sh asserts that offline.
+#
+# The provisioned datasource is uid=parkana-sql, type=parkana-sql-datasource,
+# URL http://parkana:3100 (the plugin appends /api/v1/sql). The stack is
+# single-tenant, so jsonData.tenant is the default tenant; the plugin sends it
+# as X-Scope-OrgID, which Parkana accepts for the default tenant only.
+
+services:
+  grafana:
+    environment:
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: parkana-sql-datasource
+      # Read the merged tree below instead of the base read-only directory;
+      # Grafana defaults paths.provisioning to /etc/grafana/provisioning.
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning-sql
+    volumes:
+      # Host path is relative to this compose file, like the base file's
+      # mounts. The directory must already contain the built frontend and the
+      # backend binary named by plugin.json.
+      - ../../grafana/parkana-datasource/dist:/var/lib/grafana/plugins/parkana-sql-datasource:ro
+      # One directory mount (not a file nested in the base's read-only mount)
+      # carrying the base Loki/Parkana datasource copy and the SQL datasource.
+      - ./grafana-sql/provisioning:/etc/grafana/provisioning-sql:ro

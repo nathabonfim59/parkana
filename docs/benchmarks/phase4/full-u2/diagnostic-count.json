@@ -1,0 +1,18 @@
+{
+  "diagnostic_only": true,
+  "original_run_failed": true,
+  "original_failure": "publication counter reached all rows about443.7s after ACK, exceeds120s target",
+  "started_unix": 1793859897.4784617,
+  "wall_seconds": 165.52115474699985,
+  "http_code": "200",
+  "curl_exit": 0,
+  "curl_stderr": "",
+  "query": "sum(count_over_time({service_name=~\".+\"} [16306446ms]))",
+  "time": "2026-11-03T04:59:42.74812Z",
+  "expected_count": 163054456,
+  "explain_analyze": "not available via supported HTTP API; no product profiling/SQL endpoint added",
+  "duckdb_cli_available": false,
+  "duckdb_python_available": false,
+  "response_status": "success",
+  "observed_count": 163054456.0
+}

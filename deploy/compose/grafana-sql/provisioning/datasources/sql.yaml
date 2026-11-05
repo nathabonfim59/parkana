@@ -1,0 +1,26 @@
+# Parkana SQL datasource for the phase 4 development stack.
+#
+# Loaded only by deploy/compose/sql.yaml, which mounts this merged provisioning
+# directory at Grafana's configured paths.provisioning path. UID and type are stable so scripts,
+# dashboards and links can address the datasource without numeric ids:
+#
+#   name: Parkana SQL
+#   uid:  parkana-sql
+#   type: parkana-sql-datasource
+#   url:  http://parkana:3100  (the plugin appends /api/v1/sql)
+#
+# The stack runs single-tenant, so the tenant is the default tenant. The plugin
+# sends it as X-Scope-OrgID; Parkana accepts the default tenant and rejects
+# other tenant IDs while multi-tenancy is disabled.
+
+apiVersion: 1
+
+datasources:
+  - name: Parkana SQL
+    uid: parkana-sql
+    type: parkana-sql-datasource
+    access: proxy
+    url: http://parkana:3100
+    editable: false
+    jsonData:
+      tenant: default

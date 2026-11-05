@@ -1,0 +1,65 @@
+# nfpm packaging for Parkana: deb and rpm from one prebuilt binary (glibc 2.34+).
+# Build with `make packages` (see the Makefile), which sets PARKANA_VERSION
+# and PARKANA_ARCH; the binary is bin/parkana.
+name: parkana
+arch: ${PARKANA_ARCH}
+platform: linux
+version: ${PARKANA_VERSION}
+version_schema: semver
+release: "1"
+section: net
+priority: optional
+maintainer: nathabonfim59 <nathabonfim59@gmail.com>
+description: |
+  Loki-compatible log store: logs as Parquet on local disk or S3-compatible
+  object storage, queried with embedded DuckDB, read by Grafana through its
+  Loki datasource; OTLP ingest, pipelines and a SQL endpoint.
+vendor: Parkana
+homepage: https://github.com/nathabonfim59/parkana
+license: MIT
+
+contents:
+  - src: bin/parkana
+    dst: /usr/bin/parkana
+    file_info:
+      mode: 0755
+
+  - src: packaging/parkana.env
+    dst: /etc/parkana/parkana.env
+    type: config|noreplace
+    file_info:
+      mode: 0640
+
+  - src: packaging/parkana.service
+    dst: /usr/lib/systemd/system/parkana.service
+
+  - dst: /var/lib/parkana
+    type: dir
+    file_info:
+      mode: 0750
+
+  - src: README.md
+    dst: /usr/share/doc/parkana/README.md
+  - src: CHANGELOG.md
+    dst: /usr/share/doc/parkana/CHANGELOG.md
+  - src: docs/configuration.md
+    dst: /usr/share/doc/parkana/configuration.md
+  - src: LICENSE
+    dst: /usr/share/doc/parkana/LICENSE
+
+scripts:
+  preinstall: packaging/scripts/preinstall.sh
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.34)
+      - libgcc-s1
+      - adduser
+  rpm:
+    depends:
+      - glibc >= 2.34
+      - libgcc
+      - shadow-utils

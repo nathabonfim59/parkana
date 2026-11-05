@@ -1,0 +1,1317 @@
+{
+  "version": 1,
+  "backend": "parkana",
+  "started_at": "2026-11-04T17:56:53.287523755Z",
+  "elapsed_seconds": 6.442385626,
+  "valid": true,
+  "errors": [],
+  "notes": [
+    "the first query is reported separately as a first observation; page-cache state was not controlled, so it is not a cache-state measurement",
+    "windows start at the manifest bound and end at most 1ms later because LogQL range literals accept whole milliseconds only; expected counts are recomputed for the rounded window",
+    "required Parkana series in both the before and after scrape: parkana_query_files_total{result=scanned}, parkana_query_files_total{result=pruned_index}, parkana_query_files_total{result=pruned_labels} and parkana_query_bytes_scanned_total; a missing one is null and invalidates the measurement",
+    "optional Parkana diagnostics (null when absent): parkana_querier_cache_fetched_bytes_total, parkana_querier_cache_downloads_total{result=success|error} and parkana_querier_sidecar_cache_fetched_bytes_total",
+    "bytes_scanned is catalog compressed candidate file bytes submitted to a scan attempt, including retries; it is not physical I/O",
+    "cache_fetched_bytes counts serialized object bytes copied into the remote object cache (partial copies included, FS direct hits excluded); sidecar_cache_fetched_bytes counts serialized sidecar bytes read into the decoded in-memory sidecar cache, including FS reads and partial failures; neither is network or disk traffic"
+  ],
+  "corpus": {
+    "version": 1,
+    "hash": "85dba178826b2a066a42139c6ff9b9721242767ab27378686d115658ceb63d08",
+    "content_hash": "2b288d2d2da99560",
+    "seed": 8098146604754141185,
+    "start": "2026-11-04T13:23:15.266317Z",
+    "step_micros": 100,
+    "target_raw_line_bytes": 2000000000,
+    "raw_line_bytes": 2000000000,
+    "lines": 13129797,
+    "through": "2026-11-04T13:45:08.246017Z",
+    "stream_label": "service_name",
+    "streams": [
+      {
+        "name": "api",
+        "labels": {
+          "service_name": "api"
+        },
+        "lines": 3282450,
+        "raw_line_bytes": 517365119
+      },
+      {
+        "name": "checkout",
+        "labels": {
+          "service_name": "checkout"
+        },
+        "lines": 3282449,
+        "raw_line_bytes": 497496786
+      },
+      {
+        "name": "search",
+        "labels": {
+          "service_name": "search"
+        },
+        "lines": 3282449,
+        "raw_line_bytes": 492624099
+      },
+      {
+        "name": "worker",
+        "labels": {
+          "service_name": "worker"
+        },
+        "lines": 3282449,
+        "raw_line_bytes": 492513996
+      }
+    ],
+    "markers": [
+      {
+        "name": "frequent",
+        "literal": "PKFREQ-2v",
+        "bytes": 9,
+        "count": 1641225,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-04T13:23:15.266317Z",
+            "through": "2026-11-04T13:45:08.245617Z",
+            "count": 1641225
+          }
+        ],
+        "schedule": {
+          "every_records": 8,
+          "blocks": [
+            {
+              "from": 0,
+              "through": 13129796
+            }
+          ]
+        }
+      },
+      {
+        "name": "rare",
+        "literal": "PKRARE-9xqz",
+        "bytes": 11,
+        "count": 12288,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-04T13:23:28.373517Z",
+            "through": "2026-11-04T13:23:34.925617Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-04T13:24:14.248717Z",
+            "through": "2026-11-04T13:24:20.800817Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-04T13:25:59.106317Z",
+            "through": "2026-11-04T13:26:05.658417Z",
+            "count": 4096
+          }
+        ],
+        "schedule": {
+          "every_records": 16,
+          "blocks": [
+            {
+              "from": 131072,
+              "through": 196608
+            },
+            {
+              "from": 589824,
+              "through": 655360
+            },
+            {
+              "from": 1638400,
+              "through": 1703936
+            }
+          ]
+        }
+      },
+      {
+        "name": "absent",
+        "literal": "PKABSENT-7mvn",
+        "bytes": 13,
+        "count": 0,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [],
+        "schedule": {
+          "every_records": 0,
+          "blocks": []
+        }
+      },
+      {
+        "name": "short_4byte",
+        "literal": "zq9x",
+        "bytes": 4,
+        "count": 4096,
+        "index_eligible_grams": [
+          3,
+          4
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-04T13:23:41.480717Z",
+            "through": "2026-11-04T13:23:48.031217Z",
+            "count": 2048
+          },
+          {
+            "from": "2026-11-04T13:25:26.338317Z",
+            "through": "2026-11-04T13:25:32.888817Z",
+            "count": 2048
+          }
+        ],
+        "schedule": {
+          "every_records": 32,
+          "blocks": [
+            {
+              "from": 262144,
+              "through": 327680
+            },
+            {
+              "from": 1310720,
+              "through": 1376256
+            }
+          ]
+        }
+      }
+    ],
+    "templates": [
+      {
+        "name": "access_json",
+        "count": 1641372,
+        "raw_line_bytes": 294743108
+      },
+      {
+        "name": "app_logfmt",
+        "count": 1642106,
+        "raw_line_bytes": 248479443
+      },
+      {
+        "name": "plain",
+        "count": 1640865,
+        "raw_line_bytes": 158040456
+      },
+      {
+        "name": "nginx",
+        "count": 1642690,
+        "raw_line_bytes": 145389891
+      },
+      {
+        "name": "fixed_256",
+        "count": 1642034,
+        "raw_line_bytes": 424288359
+      },
+      {
+        "name": "audit_json",
+        "count": 1641388,
+        "raw_line_bytes": 364470019
+      },
+      {
+        "name": "stack",
+        "count": 1639967,
+        "raw_line_bytes": 267383862
+      },
+      {
+        "name": "heartbeat",
+        "count": 1639374,
+        "raw_line_bytes": 97204729
+      },
+      {
+        "name": "tail",
+        "count": 1,
+        "raw_line_bytes": 133
+      }
+    ]
+  },
+  "query_endpoint": "http://127.0.0.1:13100/loki/api/v1/query",
+  "selector": "{service_name=~\"api|checkout|search|worker\"}",
+  "config": {
+    "repetitions": 5,
+    "warmups": 2,
+    "timeout_seconds": 120,
+    "classes": [
+      "frequent",
+      "rare",
+      "absent",
+      "short_4byte"
+    ],
+    "windows": [
+      "short",
+      "long"
+    ],
+    "metrics_url": "http://127.0.0.1:13100/metrics"
+  },
+  "first_observation": {
+    "class": "frequent",
+    "window": "short",
+    "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"PKFREQ-2v\" [19s658ms]))",
+    "expected_count": 24573,
+    "latency_ms": 70.314562,
+    "status_code": 200,
+    "observed_count": 24573,
+    "timeout": false,
+    "canceled": false,
+    "controlled_restart": false,
+    "note": "first HTTP query issued by this process; the backend was not restarted and its page cache was not dropped, so page-cache state was not controlled"
+  },
+  "series": [
+    {
+      "class": "frequent",
+      "literal": "PKFREQ-2v",
+      "window": "short",
+      "from": "2026-11-04T13:23:28.373517Z",
+      "through": "2026-11-04T13:23:48.031517Z",
+      "eval_time": "2026-11-04T13:23:48.031516Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"PKFREQ-2v\" [19s658ms]))",
+      "expected_count": 24573,
+      "observed_count": 24573,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        70.314562,
+        54.07192
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 43.674862,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 30.670074,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 37.074814,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 42.571517,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 29.943853,
+          "status_code": 200,
+          "observed_count": 24573,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 37.074814,
+      "p99_ms": 43.674862,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 3,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 15846781,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "frequent",
+      "literal": "PKFREQ-2v",
+      "window": "long",
+      "from": "2026-11-04T13:23:15.266317Z",
+      "through": "2026-11-04T13:45:08.246317Z",
+      "eval_time": "2026-11-04T13:45:08.246316Z",
+      "range_ms": 1312980,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"PKFREQ-2v\" [21m52s980ms]))",
+      "expected_count": 1641225,
+      "observed_count": 1641225,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        821.853491,
+        873.273722
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 759.765387,
+          "status_code": 200,
+          "observed_count": 1641225,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 4,
+            "files_pruned_index": 12,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 103035492,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 719.112233,
+          "status_code": 200,
+          "observed_count": 1641225,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 4,
+            "files_pruned_index": 12,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 103035492,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 912.200349,
+          "status_code": 200,
+          "observed_count": 1641225,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 4,
+            "files_pruned_index": 12,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 103035492,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 661.842922,
+          "status_code": 200,
+          "observed_count": 1641225,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 4,
+            "files_pruned_index": 12,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 103035492,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 598.936653,
+          "status_code": 200,
+          "observed_count": 1641225,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 4,
+            "files_pruned_index": 12,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 103035492,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 719.112233,
+      "p99_ms": 912.200349,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 4,
+      "files_pruned_index": 12,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 103035492,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "rare",
+      "literal": "PKRARE-9xqz",
+      "window": "short",
+      "from": "2026-11-04T13:23:28.373517Z",
+      "through": "2026-11-04T13:23:48.031517Z",
+      "eval_time": "2026-11-04T13:23:48.031516Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"PKRARE-9xqz\" [19s658ms]))",
+      "expected_count": 4096,
+      "observed_count": 4096,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        12.734845,
+        12.602466
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 13.141785,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 13.565986,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 11.678211,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 13.415531,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 15.50023,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 13.415531,
+      "p99_ms": 15.50023,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 3,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 15846781,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "rare",
+      "literal": "PKRARE-9xqz",
+      "window": "long",
+      "from": "2026-11-04T13:23:15.266317Z",
+      "through": "2026-11-04T13:45:08.246317Z",
+      "eval_time": "2026-11-04T13:45:08.246316Z",
+      "range_ms": 1312980,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"PKRARE-9xqz\" [21m52s980ms]))",
+      "expected_count": 12288,
+      "observed_count": 12288,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        38.136858,
+        32.036968
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 34.12444,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 34.492584,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 33.65353,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 36.015112,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 35.653177,
+          "status_code": 200,
+          "observed_count": 12288,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 34.492584,
+      "p99_ms": 36.015112,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 15,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 15846781,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "absent",
+      "literal": "PKABSENT-7mvn",
+      "window": "short",
+      "from": "2026-11-04T13:23:28.373517Z",
+      "through": "2026-11-04T13:23:48.031517Z",
+      "eval_time": "2026-11-04T13:23:48.031516Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"PKABSENT-7mvn\" [19s658ms]))",
+      "expected_count": 0,
+      "observed_count": 0,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        0.75735,
+        0.848754
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 0.668864,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 4,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 0.960384,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 4,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 0.657551,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 4,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 0.705433,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 4,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 0.791285,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 4,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 0.705433,
+      "p99_ms": 0.960384,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 0,
+      "files_pruned_index": 4,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 0,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "absent",
+      "literal": "PKABSENT-7mvn",
+      "window": "long",
+      "from": "2026-11-04T13:23:15.266317Z",
+      "through": "2026-11-04T13:45:08.246317Z",
+      "eval_time": "2026-11-04T13:45:08.246316Z",
+      "range_ms": 1312980,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"PKABSENT-7mvn\" [21m52s980ms]))",
+      "expected_count": 0,
+      "observed_count": 0,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        0.910741,
+        0.773561
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 0.727665,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 16,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 0.678261,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 16,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 0.651852,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 16,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 0.660508,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 16,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 0.600574,
+          "status_code": 200,
+          "observed_count": 0,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 0,
+            "files_pruned_index": 16,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 0,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 0.660508,
+      "p99_ms": 0.727665,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 0,
+      "files_pruned_index": 16,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 0,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "short_4byte",
+      "literal": "zq9x",
+      "window": "short",
+      "from": "2026-11-04T13:23:28.373517Z",
+      "through": "2026-11-04T13:23:48.031517Z",
+      "eval_time": "2026-11-04T13:23:48.031516Z",
+      "range_ms": 19658,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"zq9x\" [19s658ms]))",
+      "expected_count": 2048,
+      "observed_count": 2048,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        15.7865,
+        15.359303
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 13.745144,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 16.863944,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 13.05504,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 14.753269,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 16.778003,
+          "status_code": 200,
+          "observed_count": 2048,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 3,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 14.753269,
+      "p99_ms": 16.863944,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 3,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 15846781,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    },
+    {
+      "class": "short_4byte",
+      "literal": "zq9x",
+      "window": "long",
+      "from": "2026-11-04T13:23:15.266317Z",
+      "through": "2026-11-04T13:45:08.246317Z",
+      "eval_time": "2026-11-04T13:45:08.246316Z",
+      "range_ms": 1312980,
+      "query": "sum(count_over_time({service_name=~\"api|checkout|search|worker\"} |= \"zq9x\" [21m52s980ms]))",
+      "expected_count": 4096,
+      "observed_count": 4096,
+      "counts_consistent": true,
+      "warmup_latencies_ms": [
+        32.796402,
+        31.375117
+      ],
+      "samples": [
+        {
+          "index": 0,
+          "latency_ms": 32.346983,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 1,
+          "latency_ms": 33.45686,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 2,
+          "latency_ms": 29.273237,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 3,
+          "latency_ms": 32.086231,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        },
+        {
+          "index": 4,
+          "latency_ms": 29.922884,
+          "status_code": 200,
+          "observed_count": 4096,
+          "timeout": false,
+          "canceled": false,
+          "metrics": {
+            "files_scanned": 1,
+            "files_pruned_index": 15,
+            "files_pruned_labels": 0,
+            "bytes_scanned": 15846781,
+            "cache_fetched_bytes": 0,
+            "cache_downloads_success": 0,
+            "cache_downloads_error": 0,
+            "sidecar_cache_fetched_bytes": 0
+          },
+          "stats_total_bytes_processed": 0
+        }
+      ],
+      "p50_ms": 32.086231,
+      "p99_ms": 33.45686,
+      "sample_count": 5,
+      "failures": 0,
+      "timeouts": 0,
+      "valid": true,
+      "files_scanned": 1,
+      "files_pruned_index": 15,
+      "files_pruned_labels": 0,
+      "bytes_scanned": 15846781,
+      "cache_fetched_bytes": 0,
+      "cache_downloads_success": 0,
+      "cache_downloads_error": 0,
+      "sidecar_cache_fetched_bytes": 0,
+      "metrics_consistent": true,
+      "stats_total_bytes_processed": 0,
+      "stats_consistent": true
+    }
+  ]
+}
+

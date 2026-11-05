@@ -1,0 +1,68 @@
+# Loki 3.7.9 configuration for Parkana's phase 2 development stack.
+#
+# Single binary (the image's default target is all), filesystem storage and
+# the current TSDB index schema with structured metadata. This is based on the
+# configuration shipped in the pinned Loki release
+# (cmd/loki/loki-docker-config.yaml at tag v3.7.9), with only the limits below
+# added/changed for a local side-by-side comparison with Parkana.
+#
+# DEVELOPMENT ONLY: auth is disabled because Alloy and Grafana talk to Loki
+# inside the private compose network.
+#
+# Parity notes (PLAN.md phase 2, decision 8):
+#   - Structured metadata is allowed, so Loki and Parkana receive the same
+#     metadata when the corpus eventually carries it.
+#   - Loki 3.x can invent structured metadata during ingest. Parkana does not
+#     implement level or service-name detection yet, so both discovery
+#     features are disabled here to keep the two datasources identical for the
+#     shared corpus. Enable them again when Parkana grows the same detection.
+#     (discover_log_levels defaults to true; discover_service_name defaults to
+#     mapping job/container/etc. to service_name when no service_name label is
+#     present, which would diverge on the job-only fallback stream.)
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Accept structured metadata from push payloads (Loki 3.x default, pinned
+  # here so a future default change cannot silently alter the comparison).
+  allow_structured_metadata: true
+  # Enable the index volume endpoints. The Explore logs-volume histogram uses
+  # query_range, but Grafana's Log Volume Explorer and the planned
+  # lokicompare volume cases use /index/volume and /index/volume_range.
+  volume_enabled: true
+  # Keep Loki from enriching entries that Parkana cannot enrich yet.
+  discover_log_levels: false
+  discover_service_name: []
+
+ruler:
+  alertmanager_url: http://localhost:9093
+
+analytics:
+  reporting_enabled: false

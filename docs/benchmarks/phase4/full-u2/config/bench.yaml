@@ -1,0 +1,210 @@
+# Isolated phase 3 benchmark stack: Garage + Parkana + Loki only.
+#
+# scripts/bench-phase3.sh is the only supported entry point. It supplies a
+# fresh Compose project name, fresh per-run Garage buckets and credentials
+# through --env-file, and starts Parkana and Loki sequentially (never at the
+# same time) with the same CPU/memory limits.
+#
+# Phase 2 files and image pins are intentionally untouched: this file mounts
+# the unchanged Garage config and a benchmark-only Loki config, and builds
+# Parkana from the unchanged repository Dockerfile. The benchmark-only sqlite
+# tool is the existing (phase 2) pushgen image target; it is used one-shot to
+# read the Parkana catalog and never joins the running stack.
+#
+#   PARKANA_BENCH_PARKANA_PORT  default 13100
+#   PARKANA_BENCH_GARAGE_PORT   default 13900
+#   PARKANA_BENCH_LOKI_PORT     default 13101
+#   PARKANA_BENCH_CPUS          default 4
+#   PARKANA_BENCH_MEMORY        default 8g
+#   PARKANA_BENCH_INDEX_MAX_GRAMS  default 2097152 (scripts/bench-phase3.sh
+#                               --index-max-grams; passed only via the env file)
+#
+# Secrets arrive only from the script's 0600 env file. Never run this file
+# with credentials from a shell environment.
+
+name: parkana-bench
+
+x-backend-limits: &backend-limits
+  deploy:
+    resources:
+      limits:
+        cpus: "${PARKANA_BENCH_CPUS:-4}"
+        memory: "${PARKANA_BENCH_MEMORY:-8g}"
+
+services:
+  garage:
+    build:
+      context: .
+      dockerfile: garage.Dockerfile
+      args:
+        GARAGE_IMAGE: docker.io/dxflrs/garage:v2.5.0@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5
+    image: parkana-bench-garage:v2.5.0
+    command: ["/usr/local/bin/garage", "server"]
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    ports:
+      - "127.0.0.1:${PARKANA_BENCH_GARAGE_PORT:-13900}:3900"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/garage", "-c", "/etc/garage.toml", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  # One fresh key + bucket for Parkana. The phase-2 helper is reused verbatim;
+  # it is idempotent within this fresh project and never prints the secret.
+  garage-init-parkana:
+    image: parkana-bench-garage:v2.5.0
+    pull_policy: never
+    depends_on:
+      garage:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-ce"]
+    command: ["/usr/local/bin/garage-init.sh"]
+    environment:
+      GARAGE_CONFIG: /etc/garage.toml
+      GARAGE_BUCKET: ${PARKANA_BENCH_PARKANA_BUCKET:?fresh Parkana bucket is required}
+      GARAGE_KEY_NAME: parkana-bench
+      GARAGE_KEY_ID: ${PARKANA_BENCH_GARAGE_KEY_ID:?fresh Parkana key id is required}
+      GARAGE_KEY_SECRET: ${PARKANA_BENCH_GARAGE_KEY_SECRET:?fresh Parkana key secret is required}
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta:ro
+    restart: "no"
+
+  # A separate key + bucket for Loki on the same Garage instance.
+  garage-init-loki:
+    image: parkana-bench-garage:v2.5.0
+    pull_policy: never
+    depends_on:
+      garage:
+        condition: service_started
+      # The phase-2 init helper assigns/applies the single-node layout. Run the
+      # two imports one after the other so they cannot race on the layout
+      # version; each invocation still owns a distinct key and bucket.
+      garage-init-parkana:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "-ce"]
+    command: ["/usr/local/bin/garage-init.sh"]
+    environment:
+      GARAGE_CONFIG: /etc/garage.toml
+      GARAGE_BUCKET: ${PARKANA_BENCH_LOKI_BUCKET:?fresh Loki bucket is required}
+      GARAGE_KEY_NAME: loki-bench
+      GARAGE_KEY_ID: ${LOKI_BENCH_GARAGE_KEY_ID:?fresh Loki key id is required}
+      GARAGE_KEY_SECRET: ${LOKI_BENCH_GARAGE_KEY_SECRET:?fresh Loki key secret is required}
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta:ro
+    restart: "no"
+
+  parkana:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: parkana-bench:phase3
+    <<: *backend-limits
+    environment:
+      # No compactor role: it runs a cycle at startup, so it would contaminate
+      # query phases. Ingest and querier still share this one process.
+      PARKANA_ROLES: ingester,querier
+      PARKANA_HTTP_ADDR: ":3100"
+      PARKANA_DATA_DIR: /data
+      PARKANA_LOG_LEVEL: info
+      PARKANA_STORAGE_BACKEND: s3
+      PARKANA_STORAGE_S3_ENDPOINT: garage:3900
+      PARKANA_STORAGE_S3_BUCKET: ${PARKANA_BENCH_PARKANA_BUCKET:?fresh Parkana bucket is required}
+      PARKANA_STORAGE_S3_REGION: garage
+      PARKANA_STORAGE_S3_CREATE_BUCKET: "false"
+      PARKANA_STORAGE_S3_ACCESS_KEY: ${PARKANA_BENCH_PARKANA_ACCESS_KEY:?fresh Parkana access key is required}
+      PARKANA_STORAGE_S3_SECRET_KEY: ${PARKANA_BENCH_PARKANA_SECRET_KEY:?fresh Parkana secret is required}
+      PARKANA_STORAGE_S3_INSECURE: "true"
+      PARKANA_CATALOG_DRIVER: sqlite
+      PARKANA_CATALOG_DSN: /data/catalog.db
+      # Ingest/visibility settings are benchmark deltas from phase 2; every
+      # value is documented in docs/benchmarks.md.
+      PARKANA_INGEST_FLUSH_INTERVAL: 1s
+      PARKANA_INGEST_UPLOAD_INTERVAL: 1s
+      PARKANA_INGEST_UPLOAD_MIN: 128MiB
+      PARKANA_INGEST_UPLOAD_MAX_AGE: 10s
+      PARKANA_INGEST_MEMTABLE_MAX: 512MiB
+      PARKANA_INGEST_WAL_MAX: 256MiB
+      PARKANA_INGEST_UPLOAD_MERGE_MAX: 2GiB
+      PARKANA_QUERIER_TIMEOUT: 10m
+      # Explicit phase-3 index defaults (N=4, FP=1%, 2Mi-gram cap) so the
+      # build configuration is reproducible even if package defaults change.
+      PARKANA_INDEX_NGRAM: "4"
+      PARKANA_INDEX_FP_RATE: "0.01"
+      PARKANA_INDEX_MAX_GRAMS: "${PARKANA_BENCH_INDEX_MAX_GRAMS:-2097152}"
+    ports:
+      - "127.0.0.1:${PARKANA_BENCH_PARKANA_PORT:-13100}:3100"
+    volumes:
+      - parkana-data:/data
+    depends_on:
+      garage:
+        condition: service_healthy
+      garage-init-parkana:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+    restart: "no"
+
+  loki:
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    <<: *backend-limits
+    command: ["-config.file=/etc/loki/bench-config.yaml", "-config.expand-env=true"]
+    user: "10001:10001"
+    environment:
+      LOKI_BENCH_S3_BUCKET: ${PARKANA_BENCH_LOKI_BUCKET:?fresh Loki bucket is required}
+      LOKI_BENCH_S3_ACCESS_KEY: ${PARKANA_BENCH_LOKI_ACCESS_KEY:?fresh Loki access key is required}
+      LOKI_BENCH_S3_SECRET_KEY: ${PARKANA_BENCH_LOKI_SECRET_KEY:?fresh Loki secret is required}
+      LOKI_BENCH_S3_REGION: garage
+    volumes:
+      - ./loki/bench-config.yaml:/etc/loki/bench-config.yaml:ro
+      - loki-bench-data:/loki
+    ports:
+      - "127.0.0.1:${PARKANA_BENCH_LOKI_PORT:-13101}:3100"
+    depends_on:
+      garage:
+        condition: service_healthy
+      garage-init-loki:
+        condition: service_completed_successfully
+    stop_grace_period: 60s
+    restart: "no"
+
+  # One-shot, tool-profile container with sqlite3 (from the unchanged phase 2
+  # pushgen target). The runner only uses `docker compose run --rm --no-deps`
+  # against the Parkana volume; sqlite3 itself runs with -readonly.
+  bench-tools:
+    profiles: ["tools"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: pushgen
+    image: parkana-bench-tools:phase3
+    # Mirror the phase-2 catalog check: root in the one-shot tool container so
+    # SQLite can open the live WAL/shm files, with sqlite3 itself in -readonly
+    # mode and no network.
+    user: "0:0"
+    network_mode: none
+    volumes:
+      - parkana-data:/data
+
+  # Same tool image, read-only Loki volume. The upstream Loki image is
+  # distroless (no du), so local WAL/index/cache bytes are measured from here,
+  # never inferred from a failed exec.
+  bench-tools-loki:
+    profiles: ["tools"]
+    image: parkana-bench-tools:phase3
+    pull_policy: never
+    user: "0:0"
+    network_mode: none
+    volumes:
+      - loki-bench-data:/loki:ro
+
+volumes:
+  garage-meta:
+  garage-data:
+  parkana-data:
+  loki-bench-data:

@@ -1,0 +1,13 @@
+{
+  "source_commit": "46593319414965de857407d0db6f0e79e4fd55dd",
+  "source_dirty": false,
+  "arm": "acceptance",
+  "raw_line_bytes": 4000000000,
+  "host_launch_epoch": 1793868688.1555357,
+  "vm_command_epoch": 1793868702.4263399,
+  "size_estimate_s": 832.5,
+  "estimate_basis": "2GB measured237s scaled to4GB,25% margin,240s unmeasured cold-build allowance;5GB would980.625s",
+  "whole_run_cap_s": 900,
+  "optional_queries": "skipped; exact counts/restart unchanged; sidecar assertion independent",
+  "script_sha256": "456d0a0e4374b1eb726a6a802b2ee7fdb802d4b15331ce4898707b2938124514"
+}

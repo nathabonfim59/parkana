@@ -1,0 +1,51 @@
+// Grafana Alloy configuration for Parkana's phase 2 development stack.
+//
+// Alloy receives Loki push requests from the finite generators on port 3100
+// and fans the exact same entries out to Loki and Parkana. Both endpoints are
+// `loki.write` blocks, so the payload (labels, structured metadata, timestamps
+// and line bytes) is encoded once per endpoint from the same received entry.
+// Alloy adds no labels here and strips only labels whose names start with
+// "__" (not used by the corpus), which keeps the two stores comparable.
+//
+// use_incoming_timestamp must stay true: pushgen emits deterministic
+// millisecond-spaced timestamps and both backends must see them unchanged.
+// Without it Alloy would stamp each entry with its own receive time.
+//
+// Retry behaviour: each endpoint retries transient failures with the values
+// below (bounded so a permanently broken backend cannot pin the WAL forever).
+// A retry never changes the entry, so a late delivery is still identical on
+// both sides; every request to one endpoint is at-least-once, which is why the
+// validation waits for counts to reach the expected total rather than
+// assuming exactly one request per line.
+
+loki.write "fanout" {
+  endpoint {
+    name = "loki"
+    url  = "http://loki:3100/loki/api/v1/push"
+
+    max_backoff_retries = 30
+    min_backoff_period  = "250ms"
+    max_backoff_period  = "10s"
+  }
+
+  endpoint {
+    name = "parkana"
+    url  = "http://parkana:3100/loki/api/v1/push"
+
+    max_backoff_retries = 30
+    min_backoff_period  = "250ms"
+    max_backoff_period  = "10s"
+  }
+}
+
+loki.source.api "push" {
+  http {
+    listen_address = "0.0.0.0"
+    listen_port    = 3100
+  }
+
+  // Preserve pushgen's timestamps on both fan-out branches.
+  use_incoming_timestamp = true
+
+  forward_to = [loki.write.fanout.receiver]
+}

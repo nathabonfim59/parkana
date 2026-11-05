@@ -1,0 +1,79 @@
+# Native OTLP comparison overlay for the development stack.
+#
+# The base file (compose.yaml) stays the owner of Garage, Parkana, Loki, Alloy
+# and every pinned image. This overlay only:
+#
+#   * starts Alloy from a native OTLP config (deploy/compose/otlp.alloy),
+#   * starts Loki from a discovery-compatible config (deploy/compose/otlp.loki.yaml),
+#   * publishes Alloy's OTLP HTTP (4318) and gRPC (4317) receivers,
+#   * shortens Parkana's flush/upload settings so a finite OTLP fixture becomes
+#     queryable inside the comparison wait, and
+#   * runs only Parkana's ingester and querier roles (no compactor/scheduler).
+#
+# Usage (from the repository root):
+#
+#   docker compose -p parkana-otlp \
+#     --project-directory deploy/compose \
+#     -f deploy/compose/compose.yaml -f deploy/compose/otlp.compose.yaml \
+#     --profile phase2 up -d garage garage-init parkana loki alloy
+#
+# scripts/e2e-phase4-otlp.sh owns the project name, ports, output directory and
+# cleanup; this file is not meant to be brought up beside an existing stack.
+# Everything here is development-only, exactly like the base file.
+#
+# The overlay reuses the base Alloy/Loki images unchanged (same tag and digest)
+# and overrides only their `command` plus one additional read-only config mount.
+# The base config mounts stay in place (Compose cannot replace a list), but they
+# are unused by the overridden commands.
+
+name: parkana-phase4-otlp
+
+services:
+  parkana:
+    environment:
+      # The comparison needs the ingest and query paths only. Naming the roles
+      # explicitly means the compactor and scheduler processes never start, so
+      # there is no compaction window to reason about while exact counts are
+      # asserted.
+      PARKANA_ROLES: ingester,querier
+      # One-second flush/upload cadence plus a 1-byte minimum and a 2-second
+      # maximum age: a finite fixture uploads on the first upload pass instead
+      # of waiting for the base 128 MiB / 600 s thresholds.
+      PARKANA_INGEST_FLUSH_INTERVAL: ${PARKANA_INGEST_FLUSH_INTERVAL:-1s}
+      PARKANA_INGEST_UPLOAD_INTERVAL: ${PARKANA_INGEST_UPLOAD_INTERVAL:-1s}
+      PARKANA_INGEST_UPLOAD_MIN: ${PARKANA_INGEST_UPLOAD_MIN:-1B}
+      PARKANA_INGEST_UPLOAD_MAX_AGE: ${PARKANA_INGEST_UPLOAD_MAX_AGE:-2s}
+      # Durability is explicit in the e2e run. `always` is Parkana's default and
+      # every OTLP record is acknowledged only after the WAL fsync. Setting
+      # `interval` changes only the receipt timing and is documented in
+      # docs/otlp.md.
+      PARKANA_WAL_SYNC: ${PARKANA_WAL_SYNC:-always}
+      PARKANA_WAL_SYNC_INTERVAL: ${PARKANA_WAL_SYNC_INTERVAL:-1s}
+      # The fixture corpus is a handful of requests; the base defaults are
+      # plenty and are left visible rather than raised for this run.
+      PARKANA_INGEST_FLUSH_CONCURRENCY: ${PARKANA_INGEST_FLUSH_CONCURRENCY:-2}
+      PARKANA_INGEST_UPLOAD_CONCURRENCY: ${PARKANA_INGEST_UPLOAD_CONCURRENCY:-2}
+
+  loki:
+    # New target path, so the base mount is untouched and Compose never sees a
+    # duplicate mount point. The config itself disables only log-level
+    # discovery; service-name discovery keeps the upstream default list.
+    command: ["-config.file=/etc/loki/otlp-config.yaml"]
+    volumes:
+      - ./otlp.loki.yaml:/etc/loki/otlp-config.yaml:ro
+
+  alloy:
+    # The base command points at ./alloy/config.alloy. This command points at
+    # the native-OTLP tee config instead; the base mount stays unused.
+    command:
+      - "run"
+      - "/etc/alloy/otlp.alloy"
+      - "--storage.path=/var/lib/alloy/data"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+    volumes:
+      - ./otlp.alloy:/etc/alloy/otlp.alloy:ro
+    ports:
+      # OTLP receiver endpoints. HTTP carries the fixtures; gRPC is exposed so
+      # the native receiver is complete, but the e2e sender uses HTTP.
+      - "127.0.0.1:${ALLOY_OTLP_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${ALLOY_OTLP_HTTP_PORT:-4318}:4318"

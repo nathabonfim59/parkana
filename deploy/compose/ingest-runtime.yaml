@@ -1,0 +1,36 @@
+# Phase 4 ingest-runtime overlay for the isolated benchmark stack.
+#
+# This file is only valid as a second Compose file, after the frozen phase 3
+# base:
+#
+#   docker compose -f deploy/compose/bench.yaml \
+#                  -f deploy/compose/ingest-runtime.yaml ...
+#
+# scripts/bench-phase3.sh passes it in that order. It attaches the explicit
+# phase 4 runtime controls to the existing Parkana service and adds nothing
+# else: no services, ports, volumes, merge cap or search-index cap.
+#
+# Phase 4 defaults are flush-concurrency=4 and upload-concurrency=4. Phase 3
+# was measured with the serial flush=1/upload=1 reference; use --flush-concurrency
+# 1 --upload-concurrency 1 to reproduce that reference. `always` remains the
+# default WAL durability mode, so the acknowledgment guarantee is unchanged
+# unless `interval` is explicitly selected. Under `interval`, live tail
+# publishes an entry after its WAL write and memtable admission, so a tail
+# viewer can see lines that a machine crash before the next completed fsync
+# loses; `always` keeps acknowledgment fsync-durable.
+#
+# The four values below come from the script's 0600 --env-file. They are
+# deliberately PARKANA_BENCH_* names so the script can strip those variables
+# from the caller's environment before Compose runs; a stale shell export can
+# never override the run's recorded configuration.
+#
+# upload-concurrency bounds independent upload receipts in flight (each
+# receipt is one merge, sidecar build and object Put), not individual Puts or
+# file writers.
+services:
+  parkana:
+    environment:
+      PARKANA_WAL_SYNC: "${PARKANA_BENCH_WAL_SYNC:-always}"
+      PARKANA_WAL_SYNC_INTERVAL: "${PARKANA_BENCH_WAL_SYNC_INTERVAL:-1s}"
+      PARKANA_INGEST_FLUSH_CONCURRENCY: "${PARKANA_BENCH_FLUSH_CONCURRENCY:-4}"
+      PARKANA_INGEST_UPLOAD_CONCURRENCY: "${PARKANA_BENCH_UPLOAD_CONCURRENCY:-4}"

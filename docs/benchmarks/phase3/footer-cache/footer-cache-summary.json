@@ -1,0 +1,458 @@
+{
+  "base_commit": "def5fc569333f19486a15af273d016f6aca44a03",
+  "harness_and_production_sha256": {
+    "duckdb.go": "b6294a8322267779061990ae508ce19e8b76f319044fa8bd4b4a9ce315d72376",
+    "duckdb_test.go": "d2e8fa75de98da05d82c012f2be8704e3c6dc9df7bb9f7af8bf103da432d9261",
+    "duckdb_cache_bench_test.go": "203b5782992edd2ab22fa93f86ceaecf5ef14c03b9b7011cc6c7fb4266dd19ba"
+  },
+  "raw_log": "/tmp/sol-b-m3-profile-boat.log",
+  "boat_vm": "bx_z782ubeh",
+  "cpu": "AMD Ryzen 7 9700X 8-Core Processor",
+  "benchmark_gomaxprocs": 8,
+  "validation_vm_environment": {
+    "boat_vm": "bx_th3x9cnt",
+    "go_version": "go1.27.3 linux/amd64",
+    "cpu_count": 8,
+    "physical_memory_bytes": 16768798720,
+    "note": "Measured on immediately preceding full-check VM at identical source hashes; benchmark RAM was not separately queried."
+  },
+  "production_metadata_cache_enabled": true,
+  "external_file_cache_enabled": true,
+  "cache_local_files": false,
+  "host_page_cache": "Uncontrolled; repeated local files normally remain in OS cache.",
+  "full_check_log": "/tmp/sol-b-m3-final-boat.log",
+  "command": "go test ./internal/query/ -run 'TestParquetFooterCacheProfile|TestProfileQueryCleanupAfterCancellation|TestProfilingMetricSelection' -bench '^BenchmarkParquetFooterCache$' -benchtime=2s -v -count=3",
+  "benchmarks": {
+    "repeated-few": {
+      "on": {
+        "median_ns": 1053045,
+        "min_ns": 972986,
+        "max_ns": 1066262,
+        "samples": [
+          {
+            "ns_per_op": 1053045,
+            "bytes_per_op": 4471,
+            "allocs_per_op": 72
+          },
+          {
+            "ns_per_op": 1066262,
+            "bytes_per_op": 4417,
+            "allocs_per_op": 72
+          },
+          {
+            "ns_per_op": 972986,
+            "bytes_per_op": 4405,
+            "allocs_per_op": 72
+          }
+        ]
+      },
+      "off": {
+        "median_ns": 1233202,
+        "min_ns": 1214640,
+        "max_ns": 1253340,
+        "samples": [
+          {
+            "ns_per_op": 1253340,
+            "bytes_per_op": 4405,
+            "allocs_per_op": 72
+          },
+          {
+            "ns_per_op": 1214640,
+            "bytes_per_op": 4412,
+            "allocs_per_op": 72
+          },
+          {
+            "ns_per_op": 1233202,
+            "bytes_per_op": 4406,
+            "allocs_per_op": 72
+          }
+        ]
+      },
+      "on_change_percent_vs_off": -14.608879972624111,
+      "ranges_overlap": false
+    },
+    "repeated-many": {
+      "on": {
+        "median_ns": 4176362,
+        "min_ns": 3998722,
+        "max_ns": 4223517,
+        "samples": [
+          {
+            "ns_per_op": 4223517,
+            "bytes_per_op": 37695,
+            "allocs_per_op": 192
+          },
+          {
+            "ns_per_op": 4176362,
+            "bytes_per_op": 37698,
+            "allocs_per_op": 192
+          },
+          {
+            "ns_per_op": 3998722,
+            "bytes_per_op": 37699,
+            "allocs_per_op": 192
+          }
+        ]
+      },
+      "off": {
+        "median_ns": 4134330,
+        "min_ns": 4005669,
+        "max_ns": 5053061,
+        "samples": [
+          {
+            "ns_per_op": 4005669,
+            "bytes_per_op": 37702,
+            "allocs_per_op": 192
+          },
+          {
+            "ns_per_op": 4134330,
+            "bytes_per_op": 37729,
+            "allocs_per_op": 193
+          },
+          {
+            "ns_per_op": 5053061,
+            "bytes_per_op": 37695,
+            "allocs_per_op": 192
+          }
+        ]
+      },
+      "on_change_percent_vs_off": 1.0166580800274883,
+      "ranges_overlap": true
+    },
+    "repeated-schemagroups": {
+      "on": {
+        "median_ns": 5377595,
+        "min_ns": 4752695,
+        "max_ns": 5753760,
+        "samples": [
+          {
+            "ns_per_op": 4752695,
+            "bytes_per_op": 37697,
+            "allocs_per_op": 192
+          },
+          {
+            "ns_per_op": 5377595,
+            "bytes_per_op": 37700,
+            "allocs_per_op": 192
+          },
+          {
+            "ns_per_op": 5753760,
+            "bytes_per_op": 37694,
+            "allocs_per_op": 192
+          }
+        ]
+      },
+      "off": {
+        "median_ns": 6457431,
+        "min_ns": 5538879,
+        "max_ns": 6623352,
+        "samples": [
+          {
+            "ns_per_op": 6457431,
+            "bytes_per_op": 37702,
+            "allocs_per_op": 192
+          },
+          {
+            "ns_per_op": 5538879,
+            "bytes_per_op": 37735,
+            "allocs_per_op": 193
+          },
+          {
+            "ns_per_op": 6623352,
+            "bytes_per_op": 37709,
+            "allocs_per_op": 192
+          }
+        ]
+      },
+      "on_change_percent_vs_off": -16.722377676199716,
+      "ranges_overlap": true
+    },
+    "single-cycling-pool": {
+      "on": {
+        "median_ns": 592295,
+        "min_ns": 584630,
+        "max_ns": 597988,
+        "samples": [
+          {
+            "ns_per_op": 584630,
+            "bytes_per_op": 2113,
+            "allocs_per_op": 60
+          },
+          {
+            "ns_per_op": 592295,
+            "bytes_per_op": 2116,
+            "allocs_per_op": 60
+          },
+          {
+            "ns_per_op": 597988,
+            "bytes_per_op": 2110,
+            "allocs_per_op": 60
+          }
+        ]
+      },
+      "off": {
+        "median_ns": 623928,
+        "min_ns": 620101,
+        "max_ns": 630576,
+        "samples": [
+          {
+            "ns_per_op": 630576,
+            "bytes_per_op": 2118,
+            "allocs_per_op": 60
+          },
+          {
+            "ns_per_op": 620101,
+            "bytes_per_op": 2108,
+            "allocs_per_op": 60
+          },
+          {
+            "ns_per_op": 623928,
+            "bytes_per_op": 2112,
+            "allocs_per_op": 60
+          }
+        ]
+      },
+      "on_change_percent_vs_off": -5.0699760228744335,
+      "ranges_overlap": false
+    }
+  },
+  "profiles": {
+    "footer-cold": [
+      {
+        "cpu_time": 1.0529e-05,
+        "query_total_time": 0.002154897,
+        "optimizer_total_time": 0.000343095,
+        "binding_time": 0.003205422,
+        "binder_total_time": 0.00164695,
+        "create_plan": 1.1822e-05,
+        "scans": 0.0,
+        "scan_rows": 0.0,
+        "scan_timing": "unavailable",
+        "bytes_read": 22226.0
+      },
+      {
+        "cpu_time": 1.5158999999999998e-05,
+        "query_total_time": 0.001401508,
+        "optimizer_total_time": 0.000366509,
+        "binding_time": 0.00166887,
+        "binder_total_time": 0.000881079,
+        "create_plan": 7.454e-06,
+        "scans": 0.0,
+        "scan_rows": 0.0,
+        "scan_timing": "unavailable",
+        "bytes_read": 22226.0
+      },
+      {
+        "cpu_time": 9.207e-06,
+        "query_total_time": 0.001273296,
+        "optimizer_total_time": 0.000332025,
+        "binding_time": 0.001505632,
+        "binder_total_time": 0.000803181,
+        "create_plan": 6.422e-06,
+        "scans": 0.0,
+        "scan_rows": 0.0,
+        "scan_timing": "unavailable",
+        "bytes_read": 22226.0
+      }
+    ],
+    "footer-warm": [
+      {
+        "cpu_time": 7.2730000000000005e-06,
+        "query_total_time": 0.000772023,
+        "optimizer_total_time": 0.000240713,
+        "binding_time": 0.000768497,
+        "binder_total_time": 0.000426804,
+        "create_plan": 5.721e-06,
+        "scans": 0.0,
+        "scan_rows": 0.0,
+        "scan_timing": "unavailable",
+        "bytes_read": 0.0
+      },
+      {
+        "cpu_time": 1.7002e-05,
+        "query_total_time": 0.000993451,
+        "optimizer_total_time": 0.000315484,
+        "binding_time": 0.000968693,
+        "binder_total_time": 0.000524097,
+        "create_plan": 6.392e-06,
+        "scans": 0.0,
+        "scan_rows": 0.0,
+        "scan_timing": "unavailable",
+        "bytes_read": 0.0
+      },
+      {
+        "cpu_time": 8.927e-06,
+        "query_total_time": 0.001940713,
+        "optimizer_total_time": 0.000359116,
+        "binding_time": 0.002750788,
+        "binder_total_time": 0.001424902,
+        "create_plan": 7.044e-06,
+        "scans": 0.0,
+        "scan_rows": 0.0,
+        "scan_timing": "unavailable",
+        "bytes_read": 0.0
+      }
+    ],
+    "overlapping-scan": [
+      {
+        "cpu_time": 0.004167099,
+        "query_total_time": 0.002806532,
+        "optimizer_total_time": 0.00026576,
+        "binding_time": 0.000783386,
+        "binder_total_time": 0.00043542,
+        "create_plan": 9.658e-06,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.004136,
+        "bytes_read": 1168.0
+      },
+      {
+        "cpu_time": 0.0025939329999999997,
+        "query_total_time": 0.001672016,
+        "optimizer_total_time": 0.000261142,
+        "binding_time": 0.001419791,
+        "binder_total_time": 0.000761974,
+        "create_plan": 1.5489e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.002561,
+        "bytes_read": 1168.0
+      },
+      {
+        "cpu_time": 0.005642908,
+        "query_total_time": 0.00228967,
+        "optimizer_total_time": 0.000296568,
+        "binding_time": 0.001127583,
+        "binder_total_time": 0.000613014,
+        "create_plan": 1.056e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.005614,
+        "bytes_read": 1168.0
+      }
+    ],
+    "production-select-cache-on": [
+      {
+        "cpu_time": 0.007409697999999999,
+        "query_total_time": 0.003807386,
+        "optimizer_total_time": 0.000642069,
+        "binding_time": 0.002136821,
+        "binder_total_time": 0.001164922,
+        "create_plan": 1.9667e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.003305,
+        "bytes_read": 6409.0
+      },
+      {
+        "cpu_time": 0.007652938,
+        "query_total_time": 0.003872459,
+        "optimizer_total_time": 0.00060555,
+        "binding_time": 0.002109301,
+        "binder_total_time": 0.001156928,
+        "create_plan": 2.697e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.003807,
+        "bytes_read": 6409.0
+      },
+      {
+        "cpu_time": 0.011285474,
+        "query_total_time": 0.005376119,
+        "optimizer_total_time": 0.000772724,
+        "binding_time": 0.002570408,
+        "binder_total_time": 0.00138122,
+        "create_plan": 2.5948e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.00776,
+        "bytes_read": 6409.0
+      }
+    ],
+    "production-select-cache-off": [
+      {
+        "cpu_time": 0.011955523000000001,
+        "query_total_time": 0.004927424,
+        "optimizer_total_time": 0.000590251,
+        "binding_time": 0.002666408,
+        "binder_total_time": 0.001433197,
+        "create_plan": 2.156e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.006521,
+        "bytes_read": 28635.0
+      },
+      {
+        "cpu_time": 0.010406793,
+        "query_total_time": 0.00574828,
+        "optimizer_total_time": 0.000780961,
+        "binding_time": 0.003046395,
+        "binder_total_time": 0.001618557,
+        "create_plan": 2.5128e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.004772,
+        "bytes_read": 28635.0
+      },
+      {
+        "cpu_time": 0.024551999999999997,
+        "query_total_time": 0.010932898,
+        "optimizer_total_time": 0.000843527,
+        "binding_time": 0.004443133,
+        "binder_total_time": 0.002352688,
+        "create_plan": 2.7381e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.015674,
+        "bytes_read": 28635.0
+      }
+    ],
+    "synthetic-distinct-labels": [
+      {
+        "cpu_time": 0.004329899999999999,
+        "query_total_time": 0.002363138,
+        "optimizer_total_time": 0.000269055,
+        "binding_time": 0.001107265,
+        "binder_total_time": 0.000590783,
+        "create_plan": 1.4738e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.002273,
+        "bytes_read": 20993.0
+      },
+      {
+        "cpu_time": 0.0038798879999999997,
+        "query_total_time": 0.00309202,
+        "optimizer_total_time": 0.000428827,
+        "binding_time": 0.002255055,
+        "binder_total_time": 0.001204407,
+        "create_plan": 2.144e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.001803,
+        "bytes_read": 20993.0
+      },
+      {
+        "cpu_time": 0.017308849,
+        "query_total_time": 0.005413369,
+        "optimizer_total_time": 0.000443264,
+        "binding_time": 0.002423772,
+        "binder_total_time": 0.001282143,
+        "create_plan": 2.1681e-05,
+        "scans": 2.0,
+        "scan_rows": 256.0,
+        "scan_timing": 0.01526,
+        "bytes_read": 20993.0
+      }
+    ]
+  },
+  "limitations": [
+    "Three observations per arm; observed ranges are not confidence intervals.",
+    "Arms run in fixed on-then-off order; no randomization or host competing-load measurement.",
+    "Overlapping ranges are inconclusive, not evidence of equivalence or no regression.",
+    "Go allocation counts do not establish Go CPU overhead.",
+    "Fixtures represent controlled schema groups, not a measured post-compaction production corpus.",
+    "Profile CPU/operator timings can overlap or run concurrently; do not add them to infer wall time.",
+    "Engine total_bytes_read here describes local file reads; it is not the parkbench candidate-byte or network-fetch metric."
+  ]
+}

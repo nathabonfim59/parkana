@@ -1,0 +1,1 @@
+ALTER TABLE files ADD COLUMN "labels_complete" INTEGER NOT NULL DEFAULT 0;

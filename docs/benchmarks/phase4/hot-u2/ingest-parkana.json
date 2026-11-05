@@ -1,0 +1,237 @@
+{
+  "corpus": {
+    "version": 3,
+    "hash": "b1794a8f7d540f4c404a15f3c4f0b82c1f971a0807196b0ffad8e58602efefe4",
+    "content_hash": "cb7cbdbbf35b0743",
+    "seed": 8098146604754141185,
+    "start": "2026-11-05T00:17:36.151838Z",
+    "step_micros": 100,
+    "target_raw_line_bytes": 2000000000,
+    "raw_line_bytes": 2000000000,
+    "lines": 13309066,
+    "through": "2026-11-05T00:39:47.058438Z",
+    "stream_label": "service_name",
+    "instances_per_service": 16,
+    "streams": [
+      {
+        "name": "api",
+        "labels": {
+          "service_name": "api"
+        },
+        "lines": 13309066,
+        "raw_line_bytes": 2000000000
+      }
+    ],
+    "markers": [
+      {
+        "name": "frequent",
+        "literal": "PKFREQ-2v",
+        "bytes": 9,
+        "count": 1663634,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:17:36.151838Z",
+            "through": "2026-11-05T00:39:47.058338Z",
+            "count": 1663634
+          }
+        ],
+        "schedule": {
+          "every_records": 8,
+          "blocks": [
+            {
+              "from": 0,
+              "through": 13309065
+            }
+          ]
+        }
+      },
+      {
+        "name": "rare",
+        "literal": "PKRARE-9xqz",
+        "bytes": 11,
+        "count": 12288,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:17:49.259038Z",
+            "through": "2026-11-05T00:17:55.811138Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-05T00:18:35.134238Z",
+            "through": "2026-11-05T00:18:41.686338Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-05T00:20:19.991838Z",
+            "through": "2026-11-05T00:20:26.543938Z",
+            "count": 4096
+          }
+        ],
+        "schedule": {
+          "every_records": 16,
+          "blocks": [
+            {
+              "from": 131072,
+              "through": 196608
+            },
+            {
+              "from": 589824,
+              "through": 655360
+            },
+            {
+              "from": 1638400,
+              "through": 1703936
+            }
+          ]
+        }
+      },
+      {
+        "name": "absent",
+        "literal": "PKABSENT-7mvn",
+        "bytes": 13,
+        "count": 0,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [],
+        "schedule": {
+          "every_records": 0,
+          "blocks": []
+        }
+      },
+      {
+        "name": "short_4byte",
+        "literal": "zq9x",
+        "bytes": 4,
+        "count": 4096,
+        "index_eligible_grams": [
+          3,
+          4
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-05T00:18:02.366238Z",
+            "through": "2026-11-05T00:18:08.916738Z",
+            "count": 2048
+          },
+          {
+            "from": "2026-11-05T00:19:47.223838Z",
+            "through": "2026-11-05T00:19:53.774338Z",
+            "count": 2048
+          }
+        ],
+        "schedule": {
+          "every_records": 32,
+          "blocks": [
+            {
+              "from": 262144,
+              "through": 327680
+            },
+            {
+              "from": 1310720,
+              "through": 1376256
+            }
+          ]
+        }
+      }
+    ],
+    "templates": [
+      {
+        "name": "access_json",
+        "count": 1663802,
+        "raw_line_bytes": 294213929
+      },
+      {
+        "name": "app_logfmt",
+        "count": 1664701,
+        "raw_line_bytes": 247342003
+      },
+      {
+        "name": "plain",
+        "count": 1663255,
+        "raw_line_bytes": 155637158
+      },
+      {
+        "name": "nginx",
+        "count": 1664908,
+        "raw_line_bytes": 147376130
+      },
+      {
+        "name": "fixed_256",
+        "count": 1664538,
+        "raw_line_bytes": 430104407
+      },
+      {
+        "name": "audit_json",
+        "count": 1663755,
+        "raw_line_bytes": 364879222
+      },
+      {
+        "name": "stack",
+        "count": 1662184,
+        "raw_line_bytes": 266453074
+      },
+      {
+        "name": "heartbeat",
+        "count": 1661922,
+        "raw_line_bytes": 93993964
+      },
+      {
+        "name": "tail",
+        "count": 1,
+        "raw_line_bytes": 113
+      }
+    ]
+  },
+  "elapsed_seconds": 25.243194194,
+  "ack_raw_line_bytes": 2000000000,
+  "ack_lines": 13309066,
+  "ack_mb_s": 79.22927600324746,
+  "ack_lines_s": 527233.8317297184,
+  "generation": {
+    "seconds": 10.883126909,
+    "raw_line_bytes": 2000000000,
+    "lines": 13309066,
+    "mb_s": 183.77071375930237,
+    "percent_of_elapsed": 43.11311328257652
+  },
+  "delivery": {
+    "batches": 2662,
+    "requests": 10656,
+    "succeeded": 10656,
+    "failed": 0,
+    "retried": 0,
+    "ambiguous": 0,
+    "lines": 13309066,
+    "raw_line_bytes": 2000000000,
+    "clean": true,
+    "cancelled": false
+  },
+  "parallelism": {
+    "label_sets": 16,
+    "active_senders": 16,
+    "concurrency_limit": 16,
+    "peak_in_flight_pushes": 16
+  },
+  "batching": {
+    "entries_per_request": 1250,
+    "push_requests": 10656,
+    "attempted_entries": 13309066,
+    "min_entries_per_request": 558,
+    "max_entries_per_request": 1250,
+    "mean_entries_per_request": 1248.9739114114113
+  }
+}
+

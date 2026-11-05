@@ -1,0 +1,1150 @@
+[
+  {
+    "name": "logs-base-api-range",
+    "type": "range",
+    "query": "{service_name=\"api\"}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "logs-base-web-line-filter",
+    "type": "range",
+    "query": "{service_name=\"web\"} |= \"stream=web\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5000ms"
+    }
+  },
+  {
+    "name": "logs-job-only-legacy",
+    "type": "range",
+    "query": "{job=\"legacy\"}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5000ms"
+    }
+  },
+  {
+    "name": "logs-corpus-json-parser-filter",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json status=\"response.status\" | status >= 400",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5000ms"
+    }
+  },
+  {
+    "name": "logs-corpus-logfmt-line-filter",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} |= \"status=5\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5000ms"
+    }
+  },
+  {
+    "name": "logs-corpus-plain-regexp",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"plain\"} |~ \"ERROR pod-[ab] status=5[0-9][0-9]\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5000ms"
+    }
+  },
+  {
+    "name": "count-instant-by-level",
+    "type": "instant",
+    "query": "sum by (level) (count_over_time({service_name=\"corpus\"}[5m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "grafana-histogram-api",
+    "type": "range",
+    "query": "sum by (level, detected_level) (count_over_time({service_name=\"api\"} | drop __error__[1m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "1m"
+    }
+  },
+  {
+    "name": "grafana-histogram-corpus-json",
+    "type": "range",
+    "query": "sum by (level, detected_level) (count_over_time({service_name=\"corpus\", format=\"json\"} | json | drop __error__ [1m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "60000ms"
+    }
+  },
+  {
+    "name": "grafana-histogram-corpus-logfmt",
+    "type": "range",
+    "query": "sum by (level, detected_level) (count_over_time({service_name=\"corpus\", format=\"logfmt\"} | logfmt | drop __error__ [1m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "60000ms"
+    }
+  },
+  {
+    "name": "grafana-labels-scoped",
+    "type": "labels",
+    "query": "{service_name=\"corpus\"}"
+  },
+  {
+    "name": "grafana-labels-unscoped",
+    "type": "labels"
+  },
+  {
+    "name": "grafana-label-values-service-name",
+    "type": "label_values",
+    "query": "{job=\"corpus\"}",
+    "params": {
+      "label": "service_name"
+    }
+  },
+  {
+    "name": "grafana-label-values-format-scoped",
+    "type": "label_values",
+    "query": "{service_name=\"corpus\", level=\"error\"}",
+    "params": {
+      "label": "format"
+    }
+  },
+  {
+    "name": "grafana-series-corpus",
+    "type": "series",
+    "query": "{service_name=\"corpus\"}"
+  },
+  {
+    "name": "series-job-only-legacy",
+    "type": "series",
+    "query": "{job=\"legacy\"}"
+  },
+  {
+    "name": "series-multiple-selectors",
+    "type": "series",
+    "query": "{service_name=\"api\"}",
+    "params": {
+      "match[]": [
+        "{service_name=\"web\"}",
+        "{job=\"legacy\"}"
+      ]
+    }
+  },
+  {
+    "name": "instant-log-selector-rejected",
+    "type": "instant",
+    "query": "{service_name=\"api\"}",
+    "expect": {
+      "status": 400
+    }
+  },
+  {
+    "name": "sel-not-equal-missing",
+    "type": "range",
+    "query": "{env=\"dev\", service_name!=\"api\"}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "sel-regexp-two-streams",
+    "type": "range",
+    "query": "{service_name=~\"api|web\"}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "sel-not-regexp-job",
+    "type": "range",
+    "query": "{env=\"dev\", job!~\"legacy\"}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "sel-regexp-nonempty",
+    "type": "range",
+    "query": "{service_name=~\".+\"}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "sel-env-dev",
+    "type": "range",
+    "query": "{env=\"dev\"}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-contains-msg",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} |= \"timed out\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-not-contains-msg",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} != \"timed out\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-regexp-5xx",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} |~ \"status=5[0-9][0-9]\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-not-regexp-2xx",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} !~ \"status=2[0-9][0-9]\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-or-alternatives",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} |= \"timed out\" or \"invalid token\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-regexp-alternation-plain",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"plain\"} |~ \"^(ERROR|WARN) pod-a\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "json-flat-numeric-filter",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | latency > 250",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "json-named-nested-status",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json status=\"response.status\" | status >= 500",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "logfmt-permissive-level",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | level = \"warn\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "logfmt-strict-linefilter",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt --strict |= \"status=5\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "logfmt-keep-empty-named",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt --keep-empty level, msg | msg = \"cache miss\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "logfmt-strict-keep-empty",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt --strict --keep-empty | level = \"error\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "regexp-named-captures",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"plain\"} | regexp \"(?P<lvl>[A-Za-z]+) (?P<podname>pod-[ab]) status=(?P<code>[0-9]+)\" | code >= 500",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "pattern-named-captures",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"plain\"} | pattern \"<lvl> <podname> status=<code> latency=<lat>ms <_>\" | code >= 500",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "pattern-no-match-keeps-row",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"plain\"} | pattern \"NOPE <x>\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-string-or",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | level=\"error\" or level=\"warn\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-number-compare",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | latency > 100.5",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-duration-compare",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | duration > 1s",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-bytes-compare",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | size >= 1MiB",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-boolean-expression",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | (level=\"error\" or level=\"warn\") and status >= 400",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-string-regex",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | msg =~ \"cache .*\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-format-helpers",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | line_format \"{{.level}}|{{upper .pod}}|{{__line__}}\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-format-control",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | line_format \"{{if eq .level \\\"error\\\"}}E{{else}}N{{end}} {{printf \\\"%s-%d\\\" .pod .id}}\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-format-pipeline",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | line_format \"{{ .msg | trimPrefix \\\"cache \\\" }}\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "line-format-helper-set",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | line_format \"{{if hasPrefix \\\"cache\\\" .msg}}C{{else}}{{lower .level}}{{end}} {{urlencode .msg}}\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-format-rename",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | label_format lvl=level | lvl = \"error\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-format-template",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"logfmt\"} | logfmt | label_format podupper=\"{{upper .pod}}\" | podupper = \"POD-A\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "label-format-default",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | label_format absent=\"{{default \\\"none\\\" .nope}}\" | absent = \"none\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "drop-label-names",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | drop __error__, response",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "drop-label-matcher",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | drop level=\"info\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "keep-label-names",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | keep level, pod",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "keep-label-matcher",
+    "type": "range",
+    "query": "{service_name=\"corpus\", format=\"json\"} | json | keep level, pod=\"pod-a\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    }
+  },
+  {
+    "name": "unwrap-numeric",
+    "type": "instant",
+    "query": "sum by (level) (sum_over_time({service_name=\"corpus\", format=\"logfmt\"} | logfmt | unwrap latency [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "unwrap-duration",
+    "type": "instant",
+    "query": "avg by (level) (avg_over_time({service_name=\"corpus\", format=\"logfmt\"} | logfmt | unwrap duration(duration) [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "unwrap-duration-seconds",
+    "type": "instant",
+    "query": "max by (level) (max_over_time({service_name=\"corpus\", format=\"json\"} | json | unwrap duration_seconds(duration) [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "unwrap-bytes",
+    "type": "instant",
+    "query": "sum by (level) (sum_over_time({service_name=\"corpus\", format=\"json\"} | json | unwrap bytes(size) [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "unwrap-numeric-captured",
+    "type": "instant",
+    "query": "avg by (podname) (avg_over_time({service_name=\"corpus\", format=\"plain\"} | pattern \"<lvl> <podname> status=<code> latency=<lat>ms <_>\" | unwrap lat [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-rate",
+    "type": "instant",
+    "query": "sum by (format) (rate({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-bytes-over-time",
+    "type": "instant",
+    "query": "sum by (format) (bytes_over_time({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-bytes-rate",
+    "type": "instant",
+    "query": "sum by (format) (bytes_rate({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-min",
+    "type": "instant",
+    "query": "min by (level) (min_over_time({service_name=\"corpus\", format=\"json\"} | json | unwrap latency [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-stddev",
+    "type": "instant",
+    "query": "stddev by (level) (stddev_over_time({service_name=\"corpus\", format=\"json\"} | json | unwrap latency [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-stdvar",
+    "type": "instant",
+    "query": "stdvar by (level) (stdvar_over_time({service_name=\"corpus\", format=\"json\"} | json | unwrap latency [10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-first",
+    "type": "instant",
+    "query": "first_over_time({service_name=\"corpus\", format=\"json\"} | json | unwrap latency [10m]) by (level)",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-last",
+    "type": "instant",
+    "query": "last_over_time({service_name=\"corpus\", format=\"json\"} | json | unwrap latency [10m]) by (level)",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-quantile",
+    "type": "instant",
+    "query": "quantile_over_time(0.95, {service_name=\"corpus\", format=\"json\"} | json | unwrap latency [10m]) by (level)",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-absent",
+    "type": "instant",
+    "query": "absent_over_time({service_name=\"missing\"}[10m])",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-offset-positive",
+    "type": "instant",
+    "query": "sum by (format) (count_over_time({service_name=\"corpus\"}[5m] offset 10s))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "range-offset-negative",
+    "type": "range",
+    "query": "sum by (format) (count_over_time({service_name=\"corpus\"}[5m] offset -10s))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "1m"
+    }
+  },
+  {
+    "name": "agg-avg-by",
+    "type": "instant",
+    "query": "avg by (level) (count_over_time({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-min-by",
+    "type": "instant",
+    "query": "min by (format) (count_over_time({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-max-by",
+    "type": "instant",
+    "query": "max by (pod) (count_over_time({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-count-by",
+    "type": "instant",
+    "query": "count by (format) (count_over_time({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-stddev",
+    "type": "instant",
+    "query": "stddev by (format) (sum by (format, level) (count_over_time({service_name=\"corpus\"}[10m])))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-stdvar",
+    "type": "instant",
+    "query": "stdvar by (format) (sum by (format, level) (count_over_time({service_name=\"corpus\"}[10m])))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-without-pod",
+    "type": "instant",
+    "query": "sum without (pod, request_id, trace_id) (count_over_time({service_name=\"corpus\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-topk",
+    "type": "instant",
+    "query": "topk(2, sum by (level) (count_over_time({service_name=\"corpus\"}[6h])))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-bottomk",
+    "type": "instant",
+    "query": "bottomk(1, sum by (level) (count_over_time({service_name=\"corpus\"}[6h])))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-sort",
+    "type": "instant",
+    "query": "sort(count_over_time({service_name=\"corpus\", format=\"json\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-sort-desc",
+    "type": "instant",
+    "query": "sort_desc(count_over_time({service_name=\"corpus\", format=\"json\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "agg-nested",
+    "type": "instant",
+    "query": "sum(max by (level) (count_over_time({service_name=\"corpus\"}[10m])))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "scalar-precedence",
+    "type": "instant",
+    "query": "1 + 2 * 3",
+    "lokiQuirk": "scalar-timestamp"
+  },
+  {
+    "name": "scalar-parentheses",
+    "type": "instant",
+    "query": "(1 + 2) * 3",
+    "lokiQuirk": "scalar-timestamp"
+  },
+  {
+    "name": "scalar-power",
+    "type": "instant",
+    "query": "2 ^ 3 ^ 2",
+    "lokiQuirk": "scalar-timestamp"
+  },
+  {
+    "name": "scalar-compare-bool",
+    "type": "instant",
+    "query": "1 < bool 2",
+    "lokiQuirk": "scalar-timestamp"
+  },
+  {
+    "name": "binary-scalar-left",
+    "type": "instant",
+    "query": "2 * count_over_time({service_name=\"api\"}[10m])",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "binary-scalar-right",
+    "type": "instant",
+    "query": "count_over_time({service_name=\"api\"}[10m]) / 2",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "binary-scalar-compare-left",
+    "type": "instant",
+    "query": "10 < count_over_time({service_name=\"api\"}[10m])",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "binary-filter-compare",
+    "type": "instant",
+    "query": "sum by (level) (count_over_time({service_name=\"corpus\"}[10m])) >= 400",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "binary-bool-compare",
+    "type": "instant",
+    "query": "sum by (level) (count_over_time({service_name=\"corpus\"}[10m])) > bool 400",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "binary-vector-vector-add",
+    "type": "instant",
+    "query": "sum by (level) (count_over_time({service_name=\"api\"}[10m])) + sum by (level) (count_over_time({service_name=\"web\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "binary-vector-vector-compare",
+    "type": "instant",
+    "query": "sum by (level) (count_over_time({service_name=\"api\"}[10m])) >= sum by (level) (count_over_time({service_name=\"web\"}[10m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000"
+    }
+  },
+  {
+    "name": "health-vector-binary-instant",
+    "type": "instant",
+    "query": "vector(1) + vector(1)"
+  },
+  {
+    "name": "health-vector-binary-range",
+    "type": "range",
+    "query": "vector(1) + vector(1)",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "1s"
+    }
+  },
+  {
+    "name": "stats-service-api",
+    "type": "stats",
+    "query": "{service_name=\"api\"}",
+    "expect": {
+      "stats": {
+        "streams": 1,
+        "entries": 10000,
+        "bytes": 184445
+      }
+    }
+  },
+  {
+    "name": "stats-job-frontend",
+    "type": "stats",
+    "query": "{job=\"frontend\"}",
+    "expect": {
+      "stats": {
+        "streams": 2,
+        "entries": 20000,
+        "bytes": 368890
+      }
+    }
+  },
+  {
+    "name": "stats-job-legacy",
+    "type": "stats",
+    "query": "{job=\"legacy\"}",
+    "expect": {
+      "stats": {
+        "streams": 1,
+        "entries": 1000,
+        "bytes": 19890
+      }
+    }
+  },
+  {
+    "name": "stats-job-corpus",
+    "type": "stats",
+    "query": "{job=\"corpus\"}",
+    "expect": {
+      "stats": {
+        "streams": 18,
+        "entries": 1200,
+        "bytes": 164711
+      }
+    }
+  },
+  {
+    "name": "stats-not-regexp-missing-env",
+    "type": "stats",
+    "query": "{env=\"dev\", service_name!~\"api|web\"}",
+    "expect": {
+      "stats": {
+        "streams": 19,
+        "entries": 2200,
+        "bytes": 184601
+      }
+    }
+  },
+  {
+    "name": "stats-env-dev",
+    "type": "stats",
+    "query": "{env=\"dev\"}",
+    "expect": {
+      "stats": {
+        "streams": 21,
+        "entries": 22200,
+        "bytes": 553491
+      }
+    }
+  },
+  {
+    "name": "stats-service-regexp-nonempty",
+    "type": "stats",
+    "query": "{service_name=~\".+\"}",
+    "expect": {
+      "stats": {
+        "streams": 20,
+        "entries": 21200,
+        "bytes": 533601
+      }
+    }
+  },
+  {
+    "name": "volume-api-service",
+    "type": "volume",
+    "query": "{service_name=\"api\"}",
+    "params": {
+      "aggregateBy": "series",
+      "targetLabels": "service_name"
+    },
+    "expect": {
+      "series": [
+        {
+          "metric": {
+            "service_name": "api"
+          },
+          "value": 184445
+        }
+      ]
+    }
+  },
+  {
+    "name": "volume-job-frontend",
+    "type": "volume",
+    "query": "{job=\"frontend\"}",
+    "params": {
+      "aggregateBy": "series",
+      "targetLabels": "service_name"
+    },
+    "expect": {
+      "series": [
+        {
+          "metric": {
+            "service_name": "api"
+          },
+          "value": 184445
+        },
+        {
+          "metric": {
+            "service_name": "web"
+          },
+          "value": 184445
+        }
+      ]
+    }
+  },
+  {
+    "name": "volume-corpus-format-level",
+    "type": "volume",
+    "query": "{job=\"corpus\"}",
+    "params": {
+      "aggregateBy": "series",
+      "targetLabels": "format,level"
+    },
+    "expect": {
+      "series": [
+        {
+          "metric": {
+            "format": "json",
+            "level": "error"
+          },
+          "value": 20700
+        },
+        {
+          "metric": {
+            "format": "json",
+            "level": "info"
+          },
+          "value": 28518
+        },
+        {
+          "metric": {
+            "format": "json",
+            "level": "warn"
+          },
+          "value": 24077
+        },
+        {
+          "metric": {
+            "format": "logfmt",
+            "level": "error"
+          },
+          "value": 15411
+        },
+        {
+          "metric": {
+            "format": "logfmt",
+            "level": "info"
+          },
+          "value": 16471
+        },
+        {
+          "metric": {
+            "format": "logfmt",
+            "level": "warn"
+          },
+          "value": 17599
+        },
+        {
+          "metric": {
+            "format": "plain",
+            "level": "error"
+          },
+          "value": 10891
+        },
+        {
+          "metric": {
+            "format": "plain",
+            "level": "info"
+          },
+          "value": 16442
+        },
+        {
+          "metric": {
+            "format": "plain",
+            "level": "warn"
+          },
+          "value": 14602
+        }
+      ]
+    }
+  },
+  {
+    "name": "volume-bare-match-all",
+    "type": "volume",
+    "query": "{}",
+    "params": {
+      "aggregateBy": "series"
+    }
+  },
+  {
+    "name": "volume-range-api-service",
+    "type": "volume_range",
+    "query": "{service_name=\"api\"}",
+    "params": {
+      "aggregateBy": "series",
+      "step": "5m",
+      "targetLabels": "service_name"
+    }
+  },
+  {
+    "name": "invalid-selector-empty-value",
+    "type": "range",
+    "query": "{service_name=}",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    },
+    "expect": {
+      "status": 400
+    }
+  },
+  {
+    "name": "invalid-grammar-unclosed-selector",
+    "type": "range",
+    "query": "{service_name=\"api\"",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    },
+    "expect": {
+      "status": 400
+    }
+  },
+  {
+    "name": "invalid-aggregation-topk-string",
+    "type": "range",
+    "query": "topk(\"3\", count_over_time({service_name=\"api\"}[5m]))",
+    "params": {
+      "direction": "backward",
+      "limit": "1000",
+      "step": "5s"
+    },
+    "expect": {
+      "status": 400
+    }
+  }
+]

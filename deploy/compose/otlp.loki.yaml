@@ -1,0 +1,76 @@
+# Loki 3.7.9 configuration for the native OTLP comparison.
+#
+# This is the base development Loki config (deploy/compose/loki/config.yaml) with
+# exactly two intentional differences:
+#
+#   1. Service-name discovery keeps Loki's upstream defaults instead of the
+#      empty list the base config uses. OTLP fixtures exercise that default path: the
+#      `service-discovered` case relies on the indexed container.name resource
+#      attribute being mapped to service_name, which is a compatibility gate in
+#      the comparator. The default list lives in
+#      https://github.com/grafana/loki/blob/v3.7.9/pkg/validation/limits.go#L329
+#      (service, app, application, app_name, name, app_kubernetes_io_name,
+#      container, container_name, k8s_container_name, component, workload, job,
+#      k8s_job_name) and falls back to unknown_service.
+#   2. distributor.otlp_config is not set. Loki therefore applies the documented
+#      default OTLP resource mapping: the 18 resource attributes listed in
+#      https://github.com/grafana/loki/blob/v3.7.9/pkg/loghttp/push/otlp_config.go#L56
+#      become index labels and every other resource/scope/log attribute becomes
+#      structured metadata (fallback action at line 103). No tenant override is
+#      added, so this is the upstream default for the comparison.
+#
+# Log-level discovery stays off, as in the base config. Parkana does not invent a level
+# for OTLP records, and mapping the converter is the point of this stack; an
+# injected detected_level would compare an upstream enrichment Parkana does not
+# have. This is the only "unrelated" discovery exception and it is asserted by
+# scripts/e2e-phase4-otlp.sh.
+#
+# Structured metadata remains enabled so the resource/scope/log metadata the
+# default mapping produces is actually stored and comparable.
+#
+# DEVELOPMENT ONLY: auth is disabled; Alloy and the e2e sender talk to Loki
+# inside the private Compose network or over loopback.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Store the structured metadata produced by Loki's default OTLP mapping.
+  allow_structured_metadata: true
+  volume_enabled: true
+  # Keep the comparison scoped to the OTLP converter, as in the base config. This is
+  # the only discovery feature disabled; service-name discovery above is the
+  # upstream default this stack deliberately exercises.
+  discover_log_levels: false
+
+ruler:
+  alertmanager_url: http://localhost:9093
+
+analytics:
+  reporting_enabled: false

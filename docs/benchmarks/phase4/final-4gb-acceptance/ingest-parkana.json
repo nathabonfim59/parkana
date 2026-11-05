@@ -1,0 +1,261 @@
+{
+  "corpus": {
+    "version": 3,
+    "hash": "9926084c8d50f284dade21bfad33bdaa08b890a413990cff28e67d890c514e0b",
+    "content_hash": "d165ad1e973d7675",
+    "seed": 8098146604754141185,
+    "start": "2026-11-03T00:27:57.30252Z",
+    "step_micros": 100,
+    "target_raw_line_bytes": 4000000000,
+    "raw_line_bytes": 4000000000,
+    "lines": 26196634,
+    "through": "2026-11-03T01:11:36.96592Z",
+    "stream_label": "service_name",
+    "instances_per_service": 4,
+    "streams": [
+      {
+        "name": "api",
+        "labels": {
+          "service_name": "api"
+        },
+        "lines": 6549159,
+        "raw_line_bytes": 986520098
+      },
+      {
+        "name": "checkout",
+        "labels": {
+          "service_name": "checkout"
+        },
+        "lines": 6549159,
+        "raw_line_bytes": 1011047628
+      },
+      {
+        "name": "search",
+        "labels": {
+          "service_name": "search"
+        },
+        "lines": 6549158,
+        "raw_line_bytes": 1001347576
+      },
+      {
+        "name": "worker",
+        "labels": {
+          "service_name": "worker"
+        },
+        "lines": 6549158,
+        "raw_line_bytes": 1001084698
+      }
+    ],
+    "markers": [
+      {
+        "name": "frequent",
+        "literal": "PKFREQ-2v",
+        "bytes": 9,
+        "count": 3274580,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-03T00:27:57.30252Z",
+            "through": "2026-11-03T01:11:36.96582Z",
+            "count": 3274580
+          }
+        ],
+        "schedule": {
+          "every_records": 8,
+          "blocks": [
+            {
+              "from": 0,
+              "through": 26196633
+            }
+          ]
+        }
+      },
+      {
+        "name": "rare",
+        "literal": "PKRARE-9xqz",
+        "bytes": 11,
+        "count": 12288,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-03T00:28:10.40972Z",
+            "through": "2026-11-03T00:28:16.96182Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-03T00:28:56.28492Z",
+            "through": "2026-11-03T00:29:02.83702Z",
+            "count": 4096
+          },
+          {
+            "from": "2026-11-03T00:30:41.14252Z",
+            "through": "2026-11-03T00:30:47.69462Z",
+            "count": 4096
+          }
+        ],
+        "schedule": {
+          "every_records": 16,
+          "blocks": [
+            {
+              "from": 131072,
+              "through": 196608
+            },
+            {
+              "from": 589824,
+              "through": 655360
+            },
+            {
+              "from": 1638400,
+              "through": 1703936
+            }
+          ]
+        }
+      },
+      {
+        "name": "absent",
+        "literal": "PKABSENT-7mvn",
+        "bytes": 13,
+        "count": 0,
+        "index_eligible_grams": [
+          3,
+          4,
+          5
+        ],
+        "ranges": [],
+        "schedule": {
+          "every_records": 0,
+          "blocks": []
+        }
+      },
+      {
+        "name": "short_4byte",
+        "literal": "zq9x",
+        "bytes": 4,
+        "count": 4096,
+        "index_eligible_grams": [
+          3,
+          4
+        ],
+        "ranges": [
+          {
+            "from": "2026-11-03T00:28:23.51692Z",
+            "through": "2026-11-03T00:28:30.06742Z",
+            "count": 2048
+          },
+          {
+            "from": "2026-11-03T00:30:08.37452Z",
+            "through": "2026-11-03T00:30:14.92502Z",
+            "count": 2048
+          }
+        ],
+        "schedule": {
+          "every_records": 32,
+          "blocks": [
+            {
+              "from": 262144,
+              "through": 327680
+            },
+            {
+              "from": 1310720,
+              "through": 1376256
+            }
+          ]
+        }
+      }
+    ],
+    "templates": [
+      {
+        "name": "access_json",
+        "count": 3275297,
+        "raw_line_bytes": 589525217
+      },
+      {
+        "name": "app_logfmt",
+        "count": 3278013,
+        "raw_line_bytes": 497388600
+      },
+      {
+        "name": "plain",
+        "count": 3273230,
+        "raw_line_bytes": 316623258
+      },
+      {
+        "name": "nginx",
+        "count": 3276789,
+        "raw_line_bytes": 291384361
+      },
+      {
+        "name": "fixed_256",
+        "count": 3276160,
+        "raw_line_bytes": 846501375
+      },
+      {
+        "name": "audit_json",
+        "count": 3275232,
+        "raw_line_bytes": 728611892
+      },
+      {
+        "name": "stack",
+        "count": 3271013,
+        "raw_line_bytes": 534651846
+      },
+      {
+        "name": "heartbeat",
+        "count": 3270899,
+        "raw_line_bytes": 195313313
+      },
+      {
+        "name": "tail",
+        "count": 1,
+        "raw_line_bytes": 138
+      }
+    ]
+  },
+  "elapsed_seconds": 58.332808527,
+  "ack_raw_line_bytes": 4000000000,
+  "ack_lines": 26196634,
+  "ack_mb_s": 68.57204549217882,
+  "ack_lines_s": 449089.19459748955,
+  "generation": {
+    "seconds": 20.42987923,
+    "raw_line_bytes": 4000000000,
+    "lines": 26196634,
+    "mb_s": 195.79166156431558,
+    "percent_of_elapsed": 35.02296519898198
+  },
+  "delivery": {
+    "batches": 5240,
+    "requests": 20960,
+    "succeeded": 20960,
+    "failed": 0,
+    "retried": 0,
+    "ambiguous": 0,
+    "lines": 26196634,
+    "raw_line_bytes": 4000000000,
+    "clean": true,
+    "cancelled": false
+  },
+  "parallelism": {
+    "label_sets": 16,
+    "active_senders": 16,
+    "concurrency_limit": 16,
+    "peak_in_flight_pushes": 16
+  },
+  "batching": {
+    "entries_per_request": 1250,
+    "push_requests": 20960,
+    "attempted_entries": 26196634,
+    "min_entries_per_request": 1030,
+    "max_entries_per_request": 1250,
+    "mean_entries_per_request": 1249.8394083969465
+  }
+}
+

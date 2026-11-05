@@ -1,0 +1,59 @@
+{
+  "captured_unix": 1793858961.8103817,
+  "container_id": "f12cd61e3e27e7f1a1dde3caf7ebbb0fc75334a68f9e83e37ac1502940358873",
+  "state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": true,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 137,
+    "Error": "",
+    "StartedAt": "2026-11-05T05:57:21.397231777Z",
+    "FinishedAt": "2026-11-05T06:06:45.207395171Z",
+    "Health": {
+      "Status": "unhealthy",
+      "FailingStreak": 0,
+      "Log": [
+        {
+          "Start": "2026-11-05T06:06:00.183749558Z",
+          "End": "2026-11-05T06:06:00.290265015Z",
+          "ExitCode": 0,
+          "Output": "ready\n"
+        },
+        {
+          "Start": "2026-11-05T06:06:10.291464188Z",
+          "End": "2026-11-05T06:06:10.337328864Z",
+          "ExitCode": 0,
+          "Output": "ready\n"
+        },
+        {
+          "Start": "2026-11-05T06:06:20.33842083Z",
+          "End": "2026-11-05T06:06:20.385533931Z",
+          "ExitCode": 0,
+          "Output": "ready\n"
+        },
+        {
+          "Start": "2026-11-05T06:06:30.386398936Z",
+          "End": "2026-11-05T06:06:30.467820109Z",
+          "ExitCode": 0,
+          "Output": "ready\n"
+        },
+        {
+          "Start": "2026-11-05T06:06:40.468974437Z",
+          "End": "2026-11-05T06:06:40.58431475Z",
+          "ExitCode": 0,
+          "Output": "ready\n"
+        }
+      ]
+    }
+  },
+  "configured_memory_bytes": 8589934592,
+  "memory_peak": {
+    "bytes": null,
+    "source": "unavailable",
+    "reason": "not readable via docker exec after OOM; no pre-crash cgroup high-water snapshot"
+  }
+}

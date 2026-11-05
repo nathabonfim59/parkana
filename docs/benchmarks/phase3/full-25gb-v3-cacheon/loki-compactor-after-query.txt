@@ -1,0 +1,2 @@
+loki_compactor_apply_retention_last_successful_run_timestamp_seconds 0
+loki_compactor_apply_retention_operation_duration_seconds 0

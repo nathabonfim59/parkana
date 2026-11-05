@@ -1,0 +1,43 @@
+{
+  "arm": "acceptance",
+  "target_raw_line_bytes": 4000000000,
+  "whole_run_wall_s": 222.1187822818756,
+  "exit_code": 0,
+  "ack_MBps": 68.57204549217882,
+  "queryable_delay_s": 35.743,
+  "through_MBps": 42.51890111422205,
+  "memory_peak_bytes": 8589934592.0,
+  "oom_kill": 0.0,
+  "ack_window_cpu_usec": 202280408.0,
+  "receipt_admitted_attempts": 20,
+  "clamped_admitted_attempts": 0,
+  "exact_restart_lines": 26196634,
+  "receipt_source_bytes_max": 66958175,
+  "checks": {
+    "command_exit": true,
+    "wall_within_900s": true,
+    "exact_raw_bytes": true,
+    "clean_delivery": true,
+    "exact_manifest_lines": true,
+    "exact_queryable_count": true,
+    "exact_restart_count": true,
+    "corpus_shape": true,
+    "resources": true,
+    "always_F4_U4": true,
+    "no_oom": true,
+    "memory_peak": true,
+    "sidecars": true,
+    "admission_metrics": true,
+    "resolved_budget": true,
+    "actual_receipt_bytes": true
+  },
+  "timing_targets": {
+    "ack_at_least_38_8": true,
+    "delay_at_most_120": true,
+    "through_at_least_31": true
+  },
+  "operational_pass": true,
+  "decision14_pass": true,
+  "hot_one_hour": null,
+  "size_caveat": "Rates are for the actual size above; historical phase3 used25GB. Hot timing is separate from four-stream acceptance."
+}

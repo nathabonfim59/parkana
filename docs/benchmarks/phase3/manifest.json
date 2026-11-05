@@ -1,0 +1,247 @@
+[
+  {
+    "path": "footer-cache/footer-cache-summary.json",
+    "bytes": 13412,
+    "sha256": "43287f2b79c10baa92e26fedff0e13289c779557b771ef1fb560a773a3e399a1"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/config/bench.yaml",
+    "bytes": 8170,
+    "sha256": "1f921b8171978a7bacbcbf1e824ae9cb60cd9d93e7783e99fc9f45b139204737"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/config/loki-bench-config.yaml",
+    "bytes": 3351,
+    "sha256": "7e6c038e4b2458749de1309df6dc033db2ac084ba8c9c64353c755803daac81b"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/full-boat-shape.json",
+    "bytes": 171,
+    "sha256": "18f5a15d1ca4f3da811b561b262eccd7dc917bf87056012796f19ffdc666f0c2"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/full-build-identities.json",
+    "bytes": 1687,
+    "sha256": "9c91305a00203ecc963abbdaa081ce3dd2ee2be07c57e8dd4ed90a46b11b9f38"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/full-runtime-identity.json",
+    "bytes": 5411,
+    "sha256": "54958ee640dbc55302f98a55a3e01a956df5807fd91beebad93fd109e29c081d"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/index-build-parkana.txt",
+    "bytes": 803,
+    "sha256": "d991a37ddda0ddc4cd97218aa7811508e8faa725e9572a2d13558c0040a9409a"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/ingest-loki.json",
+    "bytes": 5939,
+    "sha256": "051daa725b2eb3691fc2e0668aace765bf3d41e87f06ba9a6e3813103790e554"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/ingest-parkana.json",
+    "bytes": 5938,
+    "sha256": "24526115cf7745d303b58147f7e702b2aa419f5e4434dd70954444f4eb750976"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/loki-compactor-after-query.txt",
+    "bytes": 131,
+    "sha256": "a13c38cef237c98c4bf9fda9ae3765fe71a87141af33c77517085949f87a1d45"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/loki-compactor-before-query.txt",
+    "bytes": 131,
+    "sha256": "a13c38cef237c98c4bf9fda9ae3765fe71a87141af33c77517085949f87a1d45"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/query-loki.json",
+    "bytes": 26866,
+    "sha256": "3e7b5353c3b69673497718563fae8157ebcccccc6088934700cd25c25492d151"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/query-parkana.json",
+    "bytes": 39675,
+    "sha256": "62424354e5c3dcef87443390dbdf3588bf169bfdbaa849fafae905383d315db9"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/run-metadata.txt",
+    "bytes": 3493,
+    "sha256": "c622cda3481446336f44fbdd7136c3abc4c8f142be78600b8d7016664110afce"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/storage-loki-post-query.txt",
+    "bytes": 344,
+    "sha256": "cdc2ef5afcf5b54af8ecde7f1482f83a83f8333304083b608b0d026acbcd2d8b"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/storage-loki.txt",
+    "bytes": 614,
+    "sha256": "c64187f558560b1c49e5aa6e11ecfbc037ad180059abdf94eca5cdeeba95dcc7"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/storage-parkana.txt",
+    "bytes": 857,
+    "sha256": "898877bc4bec20d099e5349afc2a13836cc53a3b7e86d5968b321102efc31e76"
+  },
+  {
+    "path": "full-25gb-v3-cacheon/timings.tsv",
+    "bytes": 428,
+    "sha256": "a5f1b651af7d6a131ecb4f27e126f8e4fd816490826d048fb235e00e47d75bd4"
+  },
+  {
+    "path": "index-matrix/index-matrix.json",
+    "bytes": 7011,
+    "sha256": "2ffa403d9cbc963c55ea1497545c13ad6c673764782ebcf2a81c57be1fe57f57"
+  },
+  {
+    "path": "sender-parallelism-v3/identity.json",
+    "bytes": 625,
+    "sha256": "b02002edb25fc7362b8f32a59fd8da47daa333acdf15e07c36b4574c2fb9b071"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-16/ack-metrics.prom",
+    "bytes": 18404,
+    "sha256": "794d6b88deb266c614c9fe2858f3738527dee35320c4e02e2fb47057d29062a6"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-16/index-build-parkana.txt",
+    "bytes": 797,
+    "sha256": "a95f5fb878a266786852c257df0979ff1416c9bf904c372d4f9374a1eca2c5e5"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-16/ingest-parkana.json",
+    "bytes": 5907,
+    "sha256": "df272a611ff541f36ba38afd73882d53240d641d37b2dc78d086f0d08f4cd0da"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-16/run-metadata.txt",
+    "bytes": 2829,
+    "sha256": "c8e7ff2d9957c2c89454c25684d29aa6f1101aee9f8a5484c1c5ffa8bef48e02"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-16/skipped.txt",
+    "bytes": 303,
+    "sha256": "33ebf25df1967cf268e414bd727a3be5b4c47383f530c13f3258e4649ff91fac"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-16/storage-parkana.txt",
+    "bytes": 851,
+    "sha256": "af1e7bf3fef9b2876e21fb97a07844bb8639ad986bce1d598cac258b9304b382"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-16/timings.tsv",
+    "bytes": 465,
+    "sha256": "93289f8a4fc4e8c35e2433217afa7e0bbe2d4d1361a618c6d23f0654af6a54d0"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-4/ack-metrics.prom",
+    "bytes": 18448,
+    "sha256": "a7bb8440a242d909247daf7221c7db51d50080564068ccc80fea622ddb5aebb6"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-4/index-build-parkana.txt",
+    "bytes": 813,
+    "sha256": "1eace15297a088c2200d19467d3098fad6f6d7e5a6e7eec518e30dae34f4f874"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-4/ingest-parkana.json",
+    "bytes": 5907,
+    "sha256": "036423d41b738c601961d1d37301c46ec2c2c42eb9de63a73708e3685eb323cc"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-4/run-metadata.txt",
+    "bytes": 2811,
+    "sha256": "302f730aa4a3cf7dfec42a97cb104827825837fb47bc22f3f25e3831c427faa6"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-4/skipped.txt",
+    "bytes": 303,
+    "sha256": "33ebf25df1967cf268e414bd727a3be5b4c47383f530c13f3258e4649ff91fac"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-4/storage-parkana.txt",
+    "bytes": 856,
+    "sha256": "6cd5f572940383e6c9fcd269a009b646de79babd910bc0b9fb9baf6455487648"
+  },
+  {
+    "path": "sender-parallelism-v3/v3-4/timings.tsv",
+    "bytes": 466,
+    "sha256": "9687b0ce90c1b56a7375a4e64f1f30c8f6df95c94a41d0dd14cf007f93d24876"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/boat-shape.json",
+    "bytes": 460,
+    "sha256": "e891acd8fe78cfd6656b6798f16ffdd32e277e4d595acf2c73a8f356b27ed7da"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/image-identities.jsonl",
+    "bytes": 1374,
+    "sha256": "6e858a56e34712067508f7e2ed0205649190f5d4534b01fa4303c88bc92ffb0b"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/index-build-parkana.txt",
+    "bytes": 804,
+    "sha256": "5c77f85b56870dde85e72121a2ab7983258f544de96758617ead3a387e3ee6e4"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/ingest-loki.json",
+    "bytes": 5506,
+    "sha256": "3cef49b23c2db71bbc549afcfa2f091be34d7aaccb053d7ca47feb82fa3d6fed"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/ingest-parkana.json",
+    "bytes": 5503,
+    "sha256": "e6215828c6f4835ce45f6b70497278893ef6af3ef08633ae5ee1d66fa476a80d"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/loki-compactor-after-query.txt",
+    "bytes": 131,
+    "sha256": "a13c38cef237c98c4bf9fda9ae3765fe71a87141af33c77517085949f87a1d45"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/loki-compactor-before-query.txt",
+    "bytes": 131,
+    "sha256": "a13c38cef237c98c4bf9fda9ae3765fe71a87141af33c77517085949f87a1d45"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/parkbench-buildinfo.json",
+    "bytes": 816,
+    "sha256": "8094874f10065c8305e62f8c3260950099547a107304492b908c5926a46bb147"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/query-loki.json",
+    "bytes": 26748,
+    "sha256": "a81b6d023c25ffd6fb3d6b97dabfef55f06e79add39351277b80fb347b376c94"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/query-parkana.json",
+    "bytes": 39541,
+    "sha256": "86531b28fb3f9469fa5ac1bdc0a75b4c3fc1fed4c27d6b32bc4b927662a1066e"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/run-metadata.txt",
+    "bytes": 2026,
+    "sha256": "e9d5b21d99d15cb60c28ce2e4e0bfbecb548bea83260dd7f7dded1c717bc7c36"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/storage-loki-post-query.txt",
+    "bytes": 348,
+    "sha256": "847baa80ad8b5fc1867a72c8c2260c83d6b6eca485b1ebbf7e67872621302af3"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/storage-loki.txt",
+    "bytes": 614,
+    "sha256": "14b2a1b47262f1a43ff7f5741af12a3b08982a9074c55cda2418c0a97d733dd7"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/storage-parkana.txt",
+    "bytes": 851,
+    "sha256": "698f736c754382ca02ee441acd359e658df047b3fab6ab4d9423c4fbf007d319"
+  },
+  {
+    "path": "small-2gb-v1-cacheoff/timings.tsv",
+    "bytes": 422,
+    "sha256": "f774d8bef0c258cd2986142181b2989c57f4867218964652026c712c9abd30bd"
+  }
+]
