@@ -180,7 +180,7 @@ orchestrator, two leads that plan and review, and runners that implement.
   The lead coordinates with the other lead through the orchestrator.
 - Runners don't commit, merge or push; leads commit on their own branch after
   review; only the orchestrator merges. Never force-push, never rewrite shared
-  history. If a git remote is ever added, it must be a private repository.
+  history. The repository is public on GitHub (github.com/nathabonfim59/parkana).
 - Report done only after `make check` passes, with the command output summary
   and the list of files changed.
 - Don't edit PLAN.md, README.md or AGENTS.md unless your task says so.
