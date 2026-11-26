@@ -6,6 +6,7 @@
 // that differed between identical queries renders as "varies" and its summary
 // field is null in the JSON. The byte definitions are printed below the tables
 // so no reader can mistake a logical byte count for physical I/O.
+
 package main
 
 import (

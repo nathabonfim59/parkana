@@ -46,7 +46,7 @@ services:
       # Durability is explicit in the e2e run. `always` is Parkana's default and
       # every OTLP record is acknowledged only after the WAL fsync. Setting
       # `interval` changes only the receipt timing and is documented in
-      # docs/otlp.md.
+      # docs/development/otlp-comparison.md.
       PARKANA_WAL_SYNC: ${PARKANA_WAL_SYNC:-always}
       PARKANA_WAL_SYNC_INTERVAL: ${PARKANA_WAL_SYNC_INTERVAL:-1s}
       # The fixture corpus is a handful of requests; the base defaults are

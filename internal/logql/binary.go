@@ -33,6 +33,7 @@
 // evalLiteral (engine.go 695-710): a scalar result for an instant query and a
 // single label-less matrix series with one point per step for a range query
 // (PopulateMatrixFromScalar, engine.go 733-755).
+
 package logql
 
 import (

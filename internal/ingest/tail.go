@@ -18,9 +18,12 @@ import (
 
 // tailHub fans freshly acknowledged pushes out to live-tail subscribers. It is
 // tenant-scoped, never blocks a push and evicts a subscriber whose queued
-// entries exceed the configured budget. Publishing happens only after WAL fsync
-// and memtable admission, so tail never shows a row the ingester would lose on
-// restart.
+// entries exceed the configured budget. A push is published once it is
+// acknowledged, after memtable admission; whether that is after the WAL fsync
+// depends on -wal.sync. In always mode it is, so tail never shows a row the
+// ingester would lose on restart. In interval mode it is after the WAL write
+// but before the next interval fsync, so tail can show a row that a machine
+// crash before that fsync loses.
 type tailHub struct {
 	mu         sync.Mutex
 	maxEntries int

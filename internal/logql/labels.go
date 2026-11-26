@@ -16,6 +16,7 @@
 // __preserve_error__ regardless of the targets (Loki's isSpecialLabel). An
 // empty target list is a no-op: the parser never produces one, but a directly
 // built stage keeps every label.
+
 package logql
 
 import (

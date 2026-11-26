@@ -82,8 +82,11 @@ func newTestDeps(t *testing.T, interval time.Duration, target config.ByteSize) *
 	}
 	d.deps = app.Deps{
 		Config: config.Config{
-			Compactor: config.Compactor{Interval: interval, TargetSize: target},
-			Index:     testIndexConfig(),
+			Compactor: config.Compactor{
+				Interval: interval, TargetSize: target,
+				OrphanGrace: time.Hour, OrphanMaxFraction: 0.1,
+			},
+			Index: testIndexConfig(),
 		},
 		Logger:  slog.New(slog.DiscardHandler),
 		Store:   d.store,
@@ -641,6 +644,10 @@ func TestNewValidatesDeps(t *testing.T) {
 		{"zero target size", func(d *testDeps) { d.deps.Config.Compactor.TargetSize = 0 }},
 		{"negative retention", func(d *testDeps) { d.deps.Config.Compactor.Retention = -time.Hour }},
 		{"negative delete delay", func(d *testDeps) { d.deps.Config.Compactor.DeleteDelay = -time.Hour }},
+		{"negative orphan grace", func(d *testDeps) { d.deps.Config.Compactor.OrphanGrace = -time.Second }},
+		{"orphan grace below 1h", func(d *testDeps) { d.deps.Config.Compactor.OrphanGrace = 30 * time.Minute }},
+		{"zero orphan max fraction", func(d *testDeps) { d.deps.Config.Compactor.OrphanMaxFraction = 0 }},
+		{"orphan max fraction above 1", func(d *testDeps) { d.deps.Config.Compactor.OrphanMaxFraction = 1.5 }},
 		{"nil store", func(d *testDeps) { d.deps.Store = nil }},
 		{"nil catalog", func(d *testDeps) { d.deps.Catalog = nil }},
 		{"nil logger", func(d *testDeps) { d.deps.Logger = nil }},
@@ -666,6 +673,16 @@ func TestNewValidatesDeps(t *testing.T) {
 			t.Fatalf("New: %v", err)
 		}
 	})
+
+	// A zero grace turns orphan collection off; the fraction is then
+	// unused, but a valid one is still required.
+	t.Run("zero orphan grace", func(t *testing.T) {
+		d := newTestDeps(t, time.Minute, 512*config.MiB)
+		d.deps.Config.Compactor.OrphanGrace = 0
+		if _, err := New(d.deps); err != nil {
+			t.Fatalf("New: %v", err)
+		}
+	})
 }
 
 func TestNewRegistersMetrics(t *testing.T) {
@@ -687,6 +704,7 @@ func TestNewRegistersMetrics(t *testing.T) {
 		"parkana_compactor_files_merged_total",
 		"parkana_compactor_bytes_merged_total",
 		"parkana_compactor_cycle_duration_seconds",
+		"parkana_compactor_orphan_sweeps_skipped_total",
 	} {
 		if !names[want] {
 			t.Fatalf("metric %s not registered; have %v", want, slices.Sorted(maps.Keys(names)))
@@ -837,5 +855,176 @@ func TestCycleCleansOrphansWithoutStreams(t *testing.T) {
 	}
 	if _, err := d.fs.Stat(t.Context(), freshKey); err != nil {
 		t.Fatalf("fresh orphan removed: %v", err)
+	}
+}
+
+// ageObject sets key's ModTime under d's filesystem store to mod.
+func ageObject(t *testing.T, d *testDeps, key string, mod time.Time) {
+	t.Helper()
+	root, err := os.OpenRoot(d.dir)
+	if err != nil {
+		t.Fatalf("OpenRoot: %v", err)
+	}
+	defer root.Close()
+	if err := root.Chtimes(filepath.FromSlash(key), mod, mod); err != nil {
+		t.Fatalf("Chtimes %s: %v", key, err)
+	}
+}
+
+// putAgedObject stores a one-byte object under a fresh data key of stream
+// with ModTime mod and returns the key.
+func putAgedObject(t *testing.T, d *testDeps, stream string, mod time.Time) string {
+	t.Helper()
+	key := objstore.NewDataKey(tenant.Default, stream, testHour)
+	if err := d.fs.Put(t.Context(), key, strings.NewReader("x"), -1); err != nil {
+		t.Fatalf("put %s: %v", key, err)
+	}
+	ageObject(t, d, key, mod)
+	return key
+}
+
+// records returns the captured records with msg, in emission order.
+func (h *mergeLogCapture) records(msg string) []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []slog.Record
+	for _, r := range h.recs {
+		if r.Message == msg {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// recordAttrs flattens r's top-level attributes by key.
+func recordAttrs(r slog.Record) map[string]slog.Value {
+	attrs := make(map[string]slog.Value)
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value
+		return true
+	})
+	return attrs
+}
+
+// TestMemoryCatalogDisablesOrphanCollection: the memory catalog forgets
+// every file on restart, so every object would look orphaned. With that
+// driver the orphan phase never runs, across any number of cycles, and New
+// says so once; retention and purge keep working on the rows the catalog
+// does have.
+func TestMemoryCatalogDisablesOrphanCollection(t *testing.T) {
+	d := newTestDeps(t, time.Hour, 512*config.MiB)
+	d.deps.Config.Catalog.Driver = "memory"
+	logs := &mergeLogCapture{}
+	d.deps.Logger = slog.New(logs)
+	s := mustService(t, d)
+
+	old := time.Now().Add(-100 * time.Hour)
+	orphan := putAgedObject(t, d, "svc", old)
+	// A deleted row past the (zero) delete delay: purge must still remove
+	// its object.
+	purged := putAgedObject(t, d, "svc", old)
+	if err := d.cat.AddFiles(t.Context(), catalog.File{
+		Tenant: tenant.Default, Stream: "svc", Key: purged,
+		MinTS: testHour, MaxTS: testHour, Rows: 1,
+		DeletedAt: time.Now().Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("AddFiles: %v", err)
+	}
+
+	for i := range 3 {
+		if err := s.cycle(t.Context()); err != nil {
+			t.Fatalf("cycle %d: %v", i, err)
+		}
+	}
+	if _, err := d.fs.Stat(t.Context(), orphan); err != nil {
+		t.Fatalf("memory catalog: unreferenced object deleted: %v", err)
+	}
+	if _, err := d.fs.Stat(t.Context(), purged); !errors.Is(err, objstore.ErrNotExist) {
+		t.Fatalf("purged row's object still present: %v", err)
+	}
+	recs := logs.records(orphanDisabledMemoryMsg)
+	if len(recs) != 1 {
+		t.Fatalf("%q logged %d times, want once", orphanDisabledMemoryMsg, len(recs))
+	}
+	if recs[0].Level != slog.LevelWarn {
+		t.Fatalf("level = %s, want WARN", recs[0].Level)
+	}
+	if !strings.Contains(orphanDisabledMemoryMsg, "orphan collection disabled") {
+		t.Fatalf("message %q does not say orphan collection is disabled", orphanDisabledMemoryMsg)
+	}
+	if got := metricValue(t, d.reg, "parkana_compactor_orphan_sweeps_skipped_total"); got != 0 {
+		t.Fatalf("skipped sweeps = %v, want 0: a disabled phase is not a skipped sweep", got)
+	}
+}
+
+// TestOrphanSweepSkipped: when the safety stop trips, the cycle deletes no
+// object, does not count as a failed cycle, logs an Error with the counts and
+// a sample of candidate keys, and bumps
+// parkana_compactor_orphan_sweeps_skipped_total once per skipped sweep.
+// Raising the fraction to 1 lets the next sweep delete the orphans.
+func TestOrphanSweepSkipped(t *testing.T) {
+	d := newTestDeps(t, time.Hour, 512*config.MiB)
+	logs := &mergeLogCapture{}
+	d.deps.Logger = slog.New(logs)
+	s := mustService(t, d)
+
+	old := time.Now().Add(-3 * time.Hour)
+	var orphans []string
+	for range 12 {
+		orphans = append(orphans, putAgedObject(t, d, "svc", old))
+	}
+
+	for range 2 {
+		s.runCycle(t.Context())
+	}
+	for _, key := range orphans {
+		if _, err := d.fs.Stat(t.Context(), key); err != nil {
+			t.Fatalf("skipped sweep deleted %s: %v", key, err)
+		}
+	}
+	if got := metricValue(t, d.reg, "parkana_compactor_orphan_sweeps_skipped_total"); got != 2 {
+		t.Fatalf("skipped sweeps = %v, want 2", got)
+	}
+	if got := metricValue(t, d.reg, "parkana_compactor_cycle_errors_total"); got != 0 {
+		t.Fatalf("cycle errors = %v, want 0: a skip is a decision, not a failure", got)
+	}
+	recs := logs.records("orphan collection skipped")
+	if len(recs) != 2 {
+		t.Fatalf("skip logged %d times, want 2", len(recs))
+	}
+	r := recs[0]
+	if r.Level != slog.LevelError {
+		t.Fatalf("level = %s, want ERROR", r.Level)
+	}
+	attrs := recordAttrs(r)
+	if got := attrs["tenant"].String(); got != string(tenant.Default) {
+		t.Errorf("tenant = %q, want %q", got, tenant.Default)
+	}
+	for key, want := range map[string]int64{"candidates": 12, "listed": 12, "referenced": 0} {
+		if got := attrs[key].Int64(); got != want {
+			t.Errorf("%s = %d, want %d", key, got, want)
+		}
+	}
+	if got := attrs["fraction"].Float64(); got != 0.1 {
+		t.Errorf("fraction = %v, want 0.1", got)
+	}
+	// Store.List has no order, so the sample is any orphanGuardSample
+	// distinct candidates.
+	sample, ok := attrs["sample"].Any().([]string)
+	if !ok || len(sample) != orphanGuardSample || len(slices.Compact(slices.Sorted(slices.Values(sample)))) != orphanGuardSample ||
+		slices.ContainsFunc(sample, func(k string) bool { return !slices.Contains(orphans, k) }) {
+		t.Errorf("sample = %v, want %d distinct candidates of %v", attrs["sample"], orphanGuardSample, orphans)
+	}
+
+	// The operator override: one cycle with the stop off deletes them.
+	s.cfg.OrphanMaxFraction = 1
+	s.runCycle(t.Context())
+	for _, key := range orphans {
+		if _, err := d.fs.Stat(t.Context(), key); !errors.Is(err, objstore.ErrNotExist) {
+			t.Fatalf("orphan %s survived with the stop off: %v", key, err)
+		}
+	}
+	if got := metricValue(t, d.reg, "parkana_compactor_orphan_sweeps_skipped_total"); got != 2 {
+		t.Fatalf("skipped sweeps after override = %v, want 2", got)
 	}
 }

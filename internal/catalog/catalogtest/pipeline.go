@@ -466,6 +466,19 @@ func RunPipelines(t *testing.T, newCatalog func(t *testing.T) catalog.Catalog) {
 		}
 	})
 
+	t.Run("PipelineCollationOrder", func(t *testing.T) {
+		c := open(t)
+		// Byte order differs from typical locale order for these.
+		pipelines := []string{"a_b", "a.b", "a-b", "a", "B"}
+		for _, n := range pipelines {
+			mustPut(t, c, def(tenant.Default, n, catalog.PipelineStageIngest, "api", `{}`), 0)
+		}
+		want := slices.Sorted(slices.Values(pipelines))
+		if got := names(t, c, tenant.Default); !slices.Equal(got, want) {
+			t.Fatalf("ListPipelines = %q, want byte order %q", got, want)
+		}
+	})
+
 	t.Run("ConcurrentCreateOneWinner", func(t *testing.T) {
 		c := open(t)
 		const writers = 8

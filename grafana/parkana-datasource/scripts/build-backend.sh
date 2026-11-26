@@ -9,8 +9,10 @@ GO="${GO:-go}"
 GOOS="${GOOS:-linux}"
 GOARCH="${GOARCH:-amd64}"
 BINARY="gpx_parkana_sql_datasource"
-OUTPUT="dist/${BINARY}_${GOOS}_${GOARCH}"
+EXT=""
+if [ "$GOOS" = windows ]; then EXT=".exe"; fi
+OUTPUT="dist/${BINARY}_${GOOS}_${GOARCH}${EXT}"
 
 mkdir -p dist
-CGO_ENABLED="${CGO_ENABLED:-0}" "$GO" build -trimpath -buildvcs=false -o "$OUTPUT" ./pkg
+CGO_ENABLED="${CGO_ENABLED:-0}" "$GO" build -trimpath -buildvcs=false -ldflags "-s -w" -o "$OUTPUT" ./pkg
 printf 'built %s\n' "$OUTPUT"

@@ -14,6 +14,7 @@
 // (count_over_time, rate, bytes_over_time, bytes_rate). Every other range
 // function and unwrap is evaluated in range_funcs.go (A8b), vector aggregations
 // in vector.go (A8a), and scalar and binary expressions in binary.go (A9).
+
 package logql
 
 import (

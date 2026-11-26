@@ -43,6 +43,7 @@
 // non-finite counter invalidates the measurement. Loki bytes come only from
 // data.stats.summary.totalBytesProcessed and are logical bytes, not physical
 // I/O.
+
 package main
 
 import (

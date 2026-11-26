@@ -1,6 +1,7 @@
 // The SQL API's metrics: request outcomes, latency, result size and the number
 // of requests currently executing. Every label is a bounded value set and no
 // metric carries a tenant, SQL text or object path.
+
 package query
 
 import (

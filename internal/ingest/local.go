@@ -113,7 +113,18 @@ type LocalStore struct {
 	mu      sync.Mutex
 	tenants map[tenant.ID]*TenantStore
 	closed  bool
+
+	// unuploaded sums every recovered tenant's TenantStore.unuploaded; each
+	// tenant adds the delta whenever its committed manifest changes.
+	unuploaded atomic.Int64
 }
+
+// UnuploadedBytes returns the local Parquet bytes waiting for upload, summed
+// over every tenant: committed files not yet retired plus the merge outputs of
+// uploads not yet published. It follows the committed manifests, never reads
+// the disk and never blocks; the ingester's back-pressure check calls it on
+// every push. Quarantined files are not counted.
+func (s *LocalStore) UnuploadedBytes() int64 { return s.unuploaded.Load() }
 
 // OpenLocal opens or creates dataDir/parquet, then recovers every tenant
 // directory found there: the committed manifest is loaded (a corrupt or
@@ -308,6 +319,13 @@ func (s *LocalStore) recoverTenant(ctx context.Context, id tenant.ID) (_ *Tenant
 		}
 	}()
 	t := &TenantStore{store: s, id: id, root: root, ops: &s.ops, temps: make(map[uuid.UUID]*UploadTemp)}
+	defer func() {
+		// A tenant that failed recovery is never cached: take back what its
+		// manifest added to the store total.
+		if retErr != nil {
+			s.unuploaded.Add(-t.unuploaded.Load())
+		}
+	}()
 	// A previous process may have renamed manifest.json and then crashed
 	// before the tenant-directory fsync that makes the rename durable.
 	// Confirm the opened tenant root before reading the manifest, so no
@@ -320,7 +338,7 @@ func (s *LocalStore) recoverTenant(ctx context.Context, id tenant.ID) (_ *Tenant
 	if err != nil {
 		return nil, err
 	}
-	t.state = m
+	t.setStateLocked(m)
 	if err := t.reconcile(ctx); err != nil {
 		return nil, err
 	}
@@ -342,6 +360,10 @@ type TenantStore struct {
 	state       tenantManifest
 	pendingSync bool // manifest renamed but the tenant-dir fsync failed
 	temps       map[uuid.UUID]*UploadTemp
+	quarantine  QuarantineUsage // cached .quarantine/ usage (quarantine.go)
+
+	// unuploaded is unuploadedBytes(state), mirrored into store.unuploaded.
+	unuploaded atomic.Int64
 }
 
 // ensureSyncedLocked finishes a pending manifest directory sync before the
@@ -417,13 +439,42 @@ func (t *TenantStore) commitLocked(next tenantManifest) error {
 	if err := t.ops.rename(t.root, manifestTempName, manifestName); err != nil {
 		return fmt.Errorf("ingest: rename %s manifest: %w", t.id, err)
 	}
-	t.state = next
+	t.setStateLocked(next)
 	t.pendingSync = true
 	if err := t.ops.syncDir(t.root, "."); err != nil {
 		return fmt.Errorf("ingest: sync %s manifest dir: %w", t.id, err)
 	}
 	t.pendingSync = false
 	return nil
+}
+
+// setStateLocked installs next as the tenant's manifest state and moves the
+// store's unuploaded total by the change in this tenant's share. It runs
+// under t.mu, or before the handle is shared during recovery.
+func (t *TenantStore) setStateLocked(next tenantManifest) {
+	t.state = next
+	v := unuploadedBytes(next)
+	t.store.unuploaded.Add(v - t.unuploaded.Swap(v))
+}
+
+// unuploadedBytes is what the local back-pressure bound counts for one
+// manifest: the bytes of every committed file not yet retired, plus the merge
+// output of every upload that has one and is not published yet. A merged
+// upload's sources stay live until publication, so both are on disk and both
+// are counted. A published upload's temp is already in the object store.
+func unuploadedBytes(m tenantManifest) int64 {
+	var n int64
+	for i := range m.Files {
+		if !m.Files[i].Retired {
+			n += m.Files[i].Bytes
+		}
+	}
+	for i := range m.Uploads {
+		if u := &m.Uploads[i]; u.Temp != "" && u.Stage != UploadPublished {
+			n += u.Bytes
+		}
+	}
+	return n
 }
 
 func (t *TenantStore) readManifest(ctx context.Context) (tenantManifest, error) {
@@ -1238,8 +1289,9 @@ func (t *TenantStore) ensureDir(rel string) error {
 	return nil
 }
 
-// quarantineLocked moves rel beneath .quarantine/, flattening the path, and
-// syncs both directories. A missing rel is a no-op. The caller holds t.mu.
+// quarantineLocked moves rel beneath .quarantine/, flattening the path, gives
+// a moved regular file a fresh, fsynced mtime (quarantine.go) and syncs both
+// directories. A missing rel is a no-op. The caller holds t.mu.
 func (t *TenantStore) quarantineLocked(rel string) error {
 	if _, err := t.root.Stat(rel); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -1264,6 +1316,12 @@ func (t *TenantStore) quarantineLocked(rel string) error {
 		return fmt.Errorf("ingest: quarantine %s: %w", rel, err)
 	}
 	var errs []error
+	if u, err := t.freshenQuarantinedLocked(dst); err != nil {
+		errs = append(errs, err)
+	} else {
+		t.quarantine.Files += u.Files
+		t.quarantine.Bytes += u.Bytes
+	}
 	if err := t.ops.syncDir(t.root, quarantineDir); err != nil {
 		errs = append(errs, err)
 	}
@@ -1381,5 +1439,8 @@ func (t *TenantStore) reconcile(ctx context.Context) error {
 			}
 		}
 	}
+	// The usage only feeds the quarantine gauges; a scan failure leaves them
+	// partial until the first sweep, which logs and counts it.
+	_ = t.scanQuarantineLocked(ctx)
 	return nil
 }

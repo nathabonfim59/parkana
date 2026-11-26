@@ -33,6 +33,7 @@
 //     Loki's boundary-minus-1ms sample timestamps for non-final buckets. A
 //     Start==End request keeps exactly one final POINT bucket at End — the
 //     approved exception where Loki's ForInterval emits no bucket at all.
+
 package query
 
 import (

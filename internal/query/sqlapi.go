@@ -8,6 +8,7 @@
 // deadlines and cancellations as the rest of the querier reports them, and a
 // sanitized 500 for catalog, cache and other internal faults. Details of an
 // internal failure go to the log, never to the response.
+
 package query
 
 import (

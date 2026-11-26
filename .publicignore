@@ -1,0 +1,5 @@
+# Repository paths that never become documentation site pages (scripts/doc-links.mjs).
+# Links to them resolve to the file on GitHub.
+
+# Raw benchmark results and their run notes; docs/benchmarks.md is the page.
+docs/benchmarks/

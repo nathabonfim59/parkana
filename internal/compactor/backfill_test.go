@@ -15,6 +15,7 @@ import (
 	"github.com/apache/arrow-go/v18/parquet/file"
 
 	"github.com/nathabonfim59/parkana/internal/catalog"
+	"github.com/nathabonfim59/parkana/internal/catalog/catalogtest"
 	"github.com/nathabonfim59/parkana/internal/config"
 	"github.com/nathabonfim59/parkana/internal/objstore"
 	"github.com/nathabonfim59/parkana/internal/schema"
@@ -891,16 +892,34 @@ func (c cancelAfterFirstLister) ListFiles(ctx context.Context, flt catalog.Filte
 // readable sidecars, proving the list-then-flag sequence works against the
 // production catalog, not only the in-memory one.
 func TestBackfillSQLiteCatalog(t *testing.T) {
-	d := newTestDeps(t, time.Hour, 512*config.MiB)
 	sq, err := catalog.NewSQLite(filepath.Join(t.TempDir(), "catalog.db"))
 	if err != nil {
 		t.Fatalf("NewSQLite: %v", err)
 	}
+	backfillRealCatalog(t, sq)
+}
+
+// TestBackfillPostgresCatalog is TestBackfillSQLiteCatalog on Postgres, where
+// the open listing holds a pooled connection while SetSidecar writes run on
+// others. It skips unless PARKANA_TEST_POSTGRES_DSN is set.
+func TestBackfillPostgresCatalog(t *testing.T) {
+	pg, err := catalog.NewPostgres(t.Context(), catalogtest.PostgresDSN(t))
+	if err != nil {
+		t.Fatalf("NewPostgres: %v", err)
+	}
+	backfillRealCatalog(t, pg)
+}
+
+// backfillRealCatalog is the body of TestBackfillSQLiteCatalog over sq,
+// which it closes when t ends.
+func backfillRealCatalog(t *testing.T, sq catalog.Catalog) {
+	t.Helper()
 	t.Cleanup(func() {
 		if err := sq.Close(); err != nil {
-			t.Errorf("close sqlite catalog: %v", err)
+			t.Errorf("close catalog: %v", err)
 		}
 	})
+	d := newTestDeps(t, time.Hour, 512*config.MiB)
 	d.cat.Catalog = sq
 	s := mustService(t, d)
 	enableBackfill(s)
@@ -913,7 +932,7 @@ func TestBackfillSQLiteCatalog(t *testing.T) {
 		mapVals(map[string]string{}), mapVals(map[string]string{}))
 
 	if err := s.backfillTenant(t.Context(), tenant.Default); err != nil {
-		t.Fatalf("backfillTenant over sqlite: %v", err)
+		t.Fatalf("backfillTenant over %T: %v", sq, err)
 	}
 
 	live := listFiles(t, sq, catalog.Filter{Tenant: tenant.Default, Stream: "svc"})
@@ -922,7 +941,7 @@ func TestBackfillSQLiteCatalog(t *testing.T) {
 	}
 	for _, f := range live {
 		if !f.HasSidecar {
-			t.Fatalf("row %s not flagged through sqlite", f.Key)
+			t.Fatalf("row %s not flagged through %T", f.Key, sq)
 		}
 	}
 	requireSidecar(t, d, first.Key, []string{"first-row"})

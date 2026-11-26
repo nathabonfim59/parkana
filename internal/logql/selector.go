@@ -26,6 +26,7 @@ type Selector struct {
 	Matchers []plan.Matcher
 }
 
+// String renders the matchers inside braces, separated by ", ".
 func (s Selector) String() string {
 	var b strings.Builder
 	b.WriteByte('{')

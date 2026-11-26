@@ -156,7 +156,7 @@ Exact expectations (optional expect field):
     stay strict, and RIGHT must be the request evaluation instant truncated to
     milliseconds. Null, non-string, unknown or misplaced quirk values fail
     before any request.
-Policy details: docs/logql.md#stats-and-volume
+Policy details: docs/query/logql.md#stats-and-volume
 
 Example corpus: cmd/lokicompare/testdata/example-corpus.json
 

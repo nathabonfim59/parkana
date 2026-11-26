@@ -16,6 +16,7 @@
 // removes names and the unwrap label, by(names) keeps exactly the requested
 // names, and explicit by () is Grouping.Singleton(): noLabels wins and yields
 // an empty identity before the group lists are consulted.
+
 package logql
 
 import (

@@ -1,4 +1,4 @@
-# Parkana phase 3 benchmarks
+# Benchmarks
 
 Parkana is measured against Loki on the same machine, with both backends
 storing on the same Garage instance. The preset runs ingest a deterministic
@@ -9,10 +9,10 @@ query it through the Loki-compatible API.
 
 | run | backend | ack MB/s | % of 31 MB/s | visibility s | through MB/s | query p50 ms (8 series) | stored object bytes |
 |---|---|---:|---:|---:|---:|---:|---:|
-| [full 25 GB, corpus v3, cache on](benchmarks/phase3/full-25gb-v3-cacheon/) | Parkana | 43.151 | 139.20% | 1349.027 | 12.964 | 0.39–15213.38 | 5130339409 |
-| [full 25 GB, corpus v3, cache on](benchmarks/phase3/full-25gb-v3-cacheon/) | Loki | 90.163 | 290.85% | 52.274 | 75.861 | 75.81–22450.48 | 5754005924 |
-| [small 2 GB, corpus v1, cache off](benchmarks/phase3/small-2gb-v1-cacheoff/) | Parkana | 21.783 | 70.27% | 111.766 | 9.824 | 0.66–719.11 | 404345997 |
-| [small 2 GB, corpus v1, cache off](benchmarks/phase3/small-2gb-v1-cacheoff/) | Loki | 32.375 | 104.44% | 12.399 | 26.963 | 71.43–2142.51 | 443772152 |
+| [full 25 GB, corpus v3, cache on](benchmarks/phase3/full-25gb-v3-cacheon/) | Parkana | 43.151 | 139.20% | 1349.027 | 12.964 | 0.39 to 15213.38 | 5130339409 |
+| [full 25 GB, corpus v3, cache on](benchmarks/phase3/full-25gb-v3-cacheon/) | Loki | 90.163 | 290.85% | 52.274 | 75.861 | 75.81 to 22450.48 | 5754005924 |
+| [small 2 GB, corpus v1, cache off](benchmarks/phase3/small-2gb-v1-cacheoff/) | Parkana | 21.783 | 70.27% | 111.766 | 9.824 | 0.66 to 719.11 | 404345997 |
+| [small 2 GB, corpus v1, cache off](benchmarks/phase3/small-2gb-v1-cacheoff/) | Loki | 32.375 | 104.44% | 12.399 | 26.963 | 71.43 to 2142.51 | 443772152 |
 
 The full Parkana run acknowledges at 43.151 MB/s but needs another 1,349.027 s
 before every line is exactly queryable, so through-visibility is 12.964 MB/s;
@@ -42,33 +42,33 @@ Separate experiments, each on its own source and hardware:
 | experiment | headline result | evidence |
 |---|---|---|
 | [sender parallelism, corpus v3, 2 GB](benchmarks/phase3/sender-parallelism-v3/) | 5.307477 → 24.045978 MB/s from 4 → 16 active senders; visibility 23.535 → 169.337 s | [four-sender manifest](benchmarks/phase3/sender-parallelism-v3/v3-4/ingest-parkana.json), [sixteen-sender manifest](benchmarks/phase3/sender-parallelism-v3/v3-16/ingest-parkana.json) |
-| [search-index build matrix](benchmarks/phase3/index-matrix/) | N=4 is the retained setting: 63.61–114.57 MB/s build, 0.564–2.255 MiB retained in the measured cells | [index-matrix.json](benchmarks/phase3/index-matrix/index-matrix.json) |
+| [search-index build matrix](benchmarks/phase3/index-matrix/) | N=4 is the retained setting: 63.61 to 114.57 MB/s build, 0.564 to 2.255 MiB retained in the measured cells | [index-matrix.json](benchmarks/phase3/index-matrix/index-matrix.json) |
 | [footer metadata cache](benchmarks/phase3/footer-cache/) | 1.053 vs 1.233 ms on repeated-few; no general speedup shown | [footer-cache-summary.json](benchmarks/phase3/footer-cache/footer-cache-summary.json) |
 
 ## Definitions
 
-**Raw line bytes.** `sum(len(line))` over emitted lines with no labels,
+Raw line bytes are `sum(len(line))` over emitted lines with no labels,
 timestamps, metadata, framing or compression. Preset sizes are decimal bytes.
 
-**Acknowledgment rate.** `raw_line_bytes / elapsed_seconds` from the ingest
+The acknowledgment rate is `raw_line_bytes / elapsed_seconds` from the ingest
 report, from generation through the last HTTP 204. It is not a uniform
 durable-commit time for both backends.
 
-**Through-visibility rate.** `raw_line_bytes / (ack_report_s +
+The through-visibility rate is `raw_line_bytes / (ack_report_s +
 queryable_delay_s)`; the delay ends at the first exact `count_over_time` equal
 to `ack_lines`, so it is not an isolated upload time.
 
-**Query latency.** Two warmups and five timed samples per series, nearest-rank
+Query latency takes two warmups and five timed samples per series, nearest-rank
 p50/p99 (p99 is the maximum sample); eight series, 80 timed responses across
 both backends.
 
-**Candidate, cache and logical bytes.** Parkana reports catalog compressed
+For candidate, cache and logical bytes, Parkana reports catalog compressed
 candidate bytes submitted to a scan attempt (including retries), cache or
 object-fetch bytes where measured, and scan/prune counts. Loki reports
 `stats.summary.totalBytesProcessed`, a logical count including metadata. None
 is physical I/O and they are not interchangeable.
 
-**Storage and builds.** Data bytes are live catalog Parquet (Parkana) or exact
+For storage and builds, data bytes are live catalog Parquet (Parkana) or exact
 Garage bytes (Loki); sidecar bytes are Garage minus catalog Parquet, and the
 write-path counter is cumulative encoded bytes, not resident storage. Local
 workdir bytes are separate. `parkana_index_build_duration_seconds` times the

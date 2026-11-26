@@ -366,3 +366,89 @@ func TestPushTransform(t *testing.T) {
 		})
 	}
 }
+
+// TestPushEmpty pins the answers to pushes that carry no entries, matching
+// Loki v3.7.10 (commit c792f58577a46c64b0a8e808d7c643ed0e8c5e83, the same
+// code as the pinned v3.7.9 baseline): a request without streams answers 422
+// with validation.MissingStreamsErrorMsg (pkg/distributor/distributor.go
+// PushWithResolver), and streams without entries are skipped
+// (distributor.go:639), so a request made only of them answers 204. Labels
+// of entry-less streams are still parsed (pkg/loghttp/push/push.go
+// ParseLokiRequest), so invalid ones answer 400. None of these reach Append
+// or the transform.
+func TestPushEmpty(t *testing.T) {
+	emptyProto, err := pushcodec.MarshalSnappy(t.Context(), &logs.PushRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entryLessProto, err := pushcodec.MarshalSnappy(t.Context(), &logs.PushRequest{Streams: []logs.Stream{
+		{Labels: logs.New(logs.Label{Name: "job", Value: "api"})},
+		{Labels: logs.New(logs.Label{Name: "job", Value: "web"})},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		jsonCT         = "application/json"
+		protoCT        = "application/x-protobuf"
+		missingStreams = "error at least one valid stream is required for ingestion"
+	)
+	cases := []struct {
+		name string
+		ct   string
+		body []byte
+		code int
+		text string // substring of the error body
+	}{
+		{"json no streams", jsonCT, []byte(`{"streams":[]}`), http.StatusUnprocessableEntity, missingStreams},
+		{"json empty object", jsonCT, []byte(`{}`), http.StatusUnprocessableEntity, missingStreams},
+		{"proto no streams", protoCT, emptyProto, http.StatusUnprocessableEntity, missingStreams},
+		{"json stream without values", jsonCT,
+			[]byte(`{"streams":[{"stream":{"job":"api"},"values":[]}]}`), http.StatusNoContent, ""},
+		{"json stream with null values", jsonCT,
+			[]byte(`{"streams":[{"stream":{"job":"api"}},{"stream":{"job":"web"},"values":null}]}`), http.StatusNoContent, ""},
+		{"proto streams without entries", protoCT, entryLessProto, http.StatusNoContent, ""},
+		{"json entry-less stream with bad label", jsonCT,
+			[]byte(`{"streams":[{"stream":{"bad-name":"x"},"values":[]}]}`), http.StatusBadRequest, "bad-name"},
+		{"json entry-less bad stream after a good one", jsonCT,
+			[]byte(`{"streams":[{"stream":{"job":"api"},"values":[]},{"stream":{"1x":"y"},"values":[]}]}`), http.StatusBadRequest, "1x"},
+	}
+	for _, tc := range cases {
+		for _, withTransform := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/transform=%t", tc.name, withTransform), func(t *testing.T) {
+				append, calls := recorder(nil)
+				transformed := 0
+				o := ingest.PushOptions{Append: append}
+				if withTransform {
+					o.Transform = func(_ context.Context, _ tenant.ID, req *logs.PushRequest) (*logs.PushRequest, error) {
+						transformed++
+						return req, nil
+					}
+				}
+				w := post(t, newHandler(t, o), tc.ct, "", tc.body, nil)
+				if w.Code != tc.code {
+					t.Fatalf("code = %d, want %d; body %q", w.Code, tc.code, w.Body)
+				}
+				if !strings.Contains(w.Body.String(), tc.text) {
+					t.Errorf("body %q does not contain %q", w.Body, tc.text)
+				}
+				if len(*calls) != 0 {
+					t.Errorf("append called %d times, want 0", len(*calls))
+				}
+				if transformed != 0 {
+					t.Errorf("transform called %d times, want 0", transformed)
+				}
+			})
+		}
+	}
+
+	// A push with entries still reaches Append exactly once.
+	append, calls := recorder(nil)
+	h := newHandler(t, ingest.PushOptions{Append: append})
+	if w := post(t, h, jsonCT, "", []byte(jsonBody), nil); w.Code != http.StatusNoContent {
+		t.Fatalf("normal push: code = %d, want 204; body %q", w.Code, w.Body)
+	}
+	if len(*calls) != 1 {
+		t.Fatalf("normal push: append called %d times, want 1", len(*calls))
+	}
+}

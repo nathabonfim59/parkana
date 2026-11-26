@@ -1,0 +1,387 @@
+{
+  "patterns": [
+    {
+      "id": "jwt",
+      "finds": "JSON Web Tokens (three base64url parts, the first two start with eyJ)",
+      "pattern": "\\beyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*",
+      "replace": "<jwt>",
+      "cases": [
+        {
+          "in": "auth ok token=eyJhbGciOiJFUyJ9.eyJzdWIiOiIxIn0.EXAMPLEsignature user=7",
+          "out": "auth ok token=<jwt> user=7"
+        },
+        {
+          "in": "header eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0. end",
+          "out": "header <jwt> end"
+        },
+        {
+          "in": "eyJustText without dots",
+          "out": "eyJustText without dots"
+        }
+      ],
+      "false_positives": "Rare: any word starting eyJ followed by a dot and another eyJ part."
+    },
+    {
+      "id": "bearer",
+      "finds": "Bearer tokens after the word Bearer (any case), 16 characters or more",
+      "pattern": "(?i)\\b(bearer\\s+)[A-Za-z0-9._~+/-]{16,}=*",
+      "replace": "${1}***",
+      "cases": [
+        {
+          "in": "Authorization: Bearer 3f9c2a7b1d4e8f60a5b2c9d7e1f40a3b",
+          "out": "Authorization: Bearer ***"
+        },
+        {
+          "in": "authorization=\"bearer abcdefghijklmnop0123==\"",
+          "out": "authorization=\"bearer ***\""
+        },
+        {
+          "in": "the bearer of bad news",
+          "out": "the bearer of bad news"
+        }
+      ],
+      "false_positives": "Prose such as \"bearer\" followed by a long word; the 16 character minimum keeps most prose intact."
+    },
+    {
+      "id": "basic-auth",
+      "finds": "HTTP Basic credentials in an Authorization header or field",
+      "pattern": "(?i)(authorization[\"']?\\s*[:=]\\s*[\"']?basic\\s+)[A-Za-z0-9+/]+=*",
+      "replace": "${1}***",
+      "cases": [
+        {
+          "in": "Authorization: Basic dXNlcjpzZWNyZXQ=",
+          "out": "Authorization: Basic ***"
+        },
+        {
+          "in": "{\"authorization\":\"Basic dXNlcjpzZWNyZXQ=\"}",
+          "out": "{\"authorization\":\"Basic ***\"}"
+        },
+        {
+          "in": "basic authentication enabled",
+          "out": "basic authentication enabled"
+        }
+      ],
+      "false_positives": "None seen; the match needs the authorization name in front."
+    },
+    {
+      "id": "url-userinfo",
+      "finds": "Passwords in URLs (scheme://user:password@host)",
+      "pattern": "(://[^:/@\\s]+:)[^@/\\s]+@",
+      "replace": "${1}***@",
+      "cases": [
+        {
+          "in": "connecting to postgres://app:s3cr3t@db.example.com:5432/app",
+          "out": "connecting to postgres://app:***@db.example.com:5432/app"
+        },
+        {
+          "in": "GET https://example.com:8443/path",
+          "out": "GET https://example.com:8443/path"
+        }
+      ],
+      "false_positives": "None seen; a URL without @ is never touched."
+    },
+    {
+      "id": "secret-kv",
+      "finds": "Secrets in key=value pairs (logfmt, query strings): password, passwd, pwd, secret, token, api_key, apikey, access_key, client_secret",
+      "pattern": "(?i)\\b((?:pass(?:word|wd)?|pwd|secret|client_secret|token|access_token|refresh_token|api[_-]?key|access[_-]?key)=)(?:\"(?:[^\"\\\\]|\\\\.)*\"|[^\\s&\"]+)",
+      "replace": "${1}***",
+      "cases": [
+        {
+          "in": "level=info msg=\"login\" user=alice password=hunter2 ok=true",
+          "out": "level=info msg=\"login\" user=alice password=*** ok=true"
+        },
+        {
+          "in": "msg=retry api_key=\"ab c\\\"d\" n=1",
+          "out": "msg=retry api_key=*** n=1"
+        },
+        {
+          "in": "GET /cb?code=1&access_token=xyz123&state=s",
+          "out": "GET /cb?code=1&access_token=***&state=s"
+        },
+        {
+          "in": "passwordless=true token_count=3",
+          "out": "passwordless=true token_count=3"
+        }
+      ],
+      "false_positives": "A key such as secret=false or token=none is masked too. Keys that only start with a listed name (token_count) are kept, because the name must be followed by =."
+    },
+    {
+      "id": "secret-json",
+      "finds": "Secrets in JSON string members with the same names, plus authorization; the result stays valid JSON",
+      "pattern": "(?i)(\"(?:pass(?:word|wd)?|pwd|secret|client_secret|token|access_token|refresh_token|api[_-]?key|access[_-]?key|authorization)\"\\s*:\\s*)\"(?:[^\"\\\\]|\\\\.)*\"",
+      "replace": "${1}\"***\"",
+      "cases": [
+        {
+          "in": "{\"user\":\"alice\",\"password\":\"hu\\\"nter2\",\"ok\":true}",
+          "out": "{\"user\":\"alice\",\"password\":\"***\",\"ok\":true}"
+        },
+        {
+          "in": "{\"Authorization\": \"Bearer abc\", \"api_key\" : \"k-1\"}",
+          "out": "{\"Authorization\": \"***\", \"api_key\" : \"***\"}"
+        },
+        {
+          "in": "{\"token_count\":3,\"password_set\":true}",
+          "out": "{\"token_count\":3,\"password_set\":true}"
+        }
+      ],
+      "false_positives": "Only string values are masked; a number or object under a secret name is left as it is."
+    },
+    {
+      "id": "access-key-id",
+      "finds": "Access key ids with the AKIA or ASIA prefix and 16 more upper-case letters or digits",
+      "pattern": "\\b(?:AKIA|ASIA)[A-Z0-9]{16}\\b",
+      "replace": "<access-key-id>",
+      "cases": [
+        {
+          "in": "using key AKIAIOSFODNN7EXAMPLE for upload",
+          "out": "using key <access-key-id> for upload"
+        },
+        {
+          "in": "AKIA short",
+          "out": "AKIA short"
+        }
+      ],
+      "false_positives": "None seen. The secret key that goes with it has no prefix; catch it by name with secret-kv or secret-json."
+    },
+    {
+      "id": "prefixed-token",
+      "finds": "Tokens with a well-known prefix: ghp_, gho_, ghu_, ghs_, ghr_, github_pat_, xoxb-, xoxp-, xoxa-, xoxr-, xoxs-, sk_live_, sk_test_, rk_live_, rk_test_, AIza",
+      "pattern": "\\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255}|xox[abprs]-[A-Za-z0-9-]{10,}|[rs]k_(?:live|test)_[A-Za-z0-9]{16,}|AIza[A-Za-z0-9_-]{35})\\b",
+      "replace": "<token>",
+      "cases": [
+        {
+          "in": "clone with ghp_000000000000000000000000000000000000 done",
+          "out": "clone with <token> done"
+        },
+        {
+          "in": "notify xoxb-1234567890-abcdefghij",
+          "out": "notify <token>"
+        },
+        {
+          "in": "charge key=sk_test_000000000000000000000000",
+          "out": "charge key=<token>"
+        },
+        {
+          "in": "maps AIza00000000000000000000000000000000000 ok",
+          "out": "maps <token> ok"
+        },
+        {
+          "in": "ghp_short",
+          "out": "ghp_short"
+        }
+      ],
+      "false_positives": "None seen; each shape has a fixed prefix and a minimum length."
+    },
+    {
+      "id": "email",
+      "finds": "Email addresses",
+      "pattern": "[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,}",
+      "replace": "<email>",
+      "cases": [
+        {
+          "in": "sent receipt to jane.doe+shop@example.com ok",
+          "out": "sent receipt to <email> ok"
+        },
+        {
+          "in": "from=a_b@mail.example.org",
+          "out": "from=<email>"
+        },
+        {
+          "in": "installed lib@1.2.3 and user@localhost",
+          "out": "installed lib@1.2.3 and user@localhost"
+        }
+      ],
+      "false_positives": "Anything shaped like an address: git remotes (git@example.com:repo) and principal names such as user@EXAMPLE.COM are masked too."
+    },
+    {
+      "id": "email-keep-domain",
+      "variant_of": "email",
+      "finds": "Email addresses, keeping the domain",
+      "pattern": "[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\\.)+[A-Za-z]{2,})",
+      "replace": "***@${1}",
+      "cases": [
+        {
+          "in": "sent receipt to jane.doe@example.com",
+          "out": "sent receipt to ***@example.com"
+        }
+      ],
+      "false_positives": "As email."
+    },
+    {
+      "id": "card",
+      "finds": "Payment card numbers: 13 to 19 digits, optionally grouped with spaces or dashes",
+      "pattern": "\\b(?:[0-9][ -]?){12,18}[0-9]\\b",
+      "replace": "<card>",
+      "cases": [
+        {
+          "in": "charged card 4111 1111 1111 1111 amount=10",
+          "out": "charged card <card> amount=10"
+        },
+        {
+          "in": "pan=5555555555554444",
+          "out": "pan=<card>"
+        },
+        {
+          "in": "order 12345678 qty 2",
+          "out": "order 12345678 qty 2"
+        },
+        {
+          "in": "ts_ms=1764000000000 done",
+          "out": "ts_ms=<card> done"
+        }
+      ],
+      "false_positives": "Any long digit run: epoch milliseconds (13 digits), order ids, phone numbers without a plus. RE2 cannot check the Luhn digit. Anchor it to a field name (card=, pan=) where you can."
+    },
+    {
+      "id": "card-keep-last4",
+      "variant_of": "card",
+      "finds": "Payment card numbers, keeping the last four digits",
+      "pattern": "\\b(?:[0-9][ -]?){9,15}([0-9]{4})\\b",
+      "replace": "****${1}",
+      "cases": [
+        {
+          "in": "charged card 4111 1111 1111 1234 amount=10",
+          "out": "charged card ****1234 amount=10"
+        },
+        {
+          "in": "pan=5555555555554444",
+          "out": "pan=****4444"
+        }
+      ],
+      "false_positives": "As card."
+    },
+    {
+      "id": "ipv4",
+      "finds": "IPv4 addresses",
+      "pattern": "\\b(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\b",
+      "replace": "<ipv4>",
+      "cases": [
+        {
+          "in": "client=203.0.113.42 status=200",
+          "out": "client=<ipv4> status=200"
+        },
+        {
+          "in": "from 192.0.2.1:5432",
+          "out": "from <ipv4>:5432"
+        },
+        {
+          "in": "value 999.1.1.1 and 10.0.0",
+          "out": "value 999.1.1.1 and 10.0.0"
+        }
+      ],
+      "false_positives": "Four-part version numbers such as 1.2.3.4 and dotted object identifiers."
+    },
+    {
+      "id": "ipv4-keep-net24",
+      "variant_of": "ipv4",
+      "finds": "IPv4 addresses, zeroing the last octet (keeps the /24 network)",
+      "pattern": "\\b((?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3})(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\b",
+      "replace": "${1}0",
+      "cases": [
+        {
+          "in": "client=203.0.113.42 status=200",
+          "out": "client=203.0.113.0 status=200"
+        }
+      ],
+      "false_positives": "As ipv4."
+    },
+    {
+      "id": "ipv6",
+      "finds": "IPv6 addresses, full and compressed (::)",
+      "pattern": "(?i)\\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\\b|\\b(?:[0-9a-f]{1,4}:){1,6}(?::[0-9a-f]{1,4}){1,6}\\b|\\b(?:[0-9a-f]{1,4}:){1,7}:|::(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4}\\b",
+      "replace": "<ipv6>",
+      "cases": [
+        {
+          "in": "client=2001:db8:85a3:0:0:8a2e:370:7334 ok",
+          "out": "client=<ipv6> ok"
+        },
+        {
+          "in": "peer 2001:db8::1 port 443",
+          "out": "peer <ipv6> port 443"
+        },
+        {
+          "in": "bind [::1]:8080 and fe80::",
+          "out": "bind [<ipv6>]:8080 and <ipv6>"
+        },
+        {
+          "in": "at 12:34:56 mac aa:bb:cc:dd:ee:ff",
+          "out": "at 12:34:56 mac aa:bb:cc:dd:ee:ff"
+        }
+      ],
+      "false_positives": "Hex words joined by :: (code paths such as add::new). Run ipv4 first: an IPv4-mapped address ::ffff:192.0.2.1 then becomes <ipv6>:<ipv4>."
+    },
+    {
+      "id": "phone-e164",
+      "finds": "Phone numbers in E.164 form (+ and 8 to 15 digits). An example: national formats vary, write your own for them",
+      "pattern": "\\+[1-9][0-9]{7,14}\\b",
+      "replace": "<phone>",
+      "cases": [
+        {
+          "in": "sms to +12025550143 sent",
+          "out": "sms to <phone> sent"
+        },
+        {
+          "in": "retry +3 attempts, offset +0100",
+          "out": "retry +3 attempts, offset +0100"
+        }
+      ],
+      "false_positives": "A plus followed by eight or more digits in another meaning."
+    },
+    {
+      "id": "national-id-example",
+      "finds": "An example national identifier with a fixed shape (NNN-NN-NNNN). Replace the shape with your country's",
+      "pattern": "\\b[0-9]{3}-[0-9]{2}-[0-9]{4}\\b",
+      "replace": "<national-id>",
+      "cases": [
+        {
+          "in": "applicant id 123-45-6789 verified",
+          "out": "applicant id <national-id> verified"
+        },
+        {
+          "in": "build 2026-11-24 ok",
+          "out": "build 2026-11-24 ok"
+        }
+      ],
+      "false_positives": "Any number with the same grouping."
+    }
+  ],
+  "combined": {
+    "about": "Every pattern that is not a variant, in catalog order, as one pipeline",
+    "cases": [
+      {
+        "in": "level=info user=jane.doe@example.com client=203.0.113.42 password=hunter2 card=4111111111111111 auth=\"Bearer eyJhbGciOiJFUyJ9.eyJzdWIiOiIxIn0.EXAMPLEsignature\"",
+        "out": "level=info user=<email> client=<ipv4> password=*** card=<card> auth=\"Bearer <jwt>\""
+      },
+      {
+        "in": "{\"user\":\"jane@example.com\",\"password\":\"hunter2\",\"peer\":\"::ffff:192.0.2.1\",\"phone\":\"+12025550143\"}",
+        "out": "{\"user\":\"<email>\",\"password\":\"***\",\"peer\":\"<ipv6>:<ipv4>\",\"phone\":\"<phone>\"}"
+      }
+    ]
+  },
+  "field_names": {
+    "about": "Field names (JSON members, logfmt keys, metadata names) whose values are probably sensitive. Matched against the name after every character outside A-Za-z0-9_ becomes _, so user.email and user-email both read user_email",
+    "pattern": "(?i)^(?:.*_)?(?:pass(?:word|wd)?|pwd|secret|token|api_?key|access_?key|private_?key|auth(?:orization)?|cookie|session(?:_?id)?|e?mail|phone|mobile|ssn|national_?id|tax_?id|card(?:_?number)?|pan|cvv|iban|ip|client_?ip|remote_?addr|birth_?date|dob)(?:_.*)?$",
+    "match": [
+      "password",
+      "db_password",
+      "Authorization",
+      "user_email",
+      "client_ip",
+      "national_id",
+      "x_api_key",
+      "session_id",
+      "card_number",
+      "refresh_token"
+    ],
+    "keep": [
+      "zip",
+      "description",
+      "company",
+      "level",
+      "duration_ms",
+      "status",
+      "trace_id",
+      "username"
+    ]
+  }
+}

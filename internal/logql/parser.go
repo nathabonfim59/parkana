@@ -61,7 +61,7 @@ func unsupportedQuery(pos Position, format string, args ...any) error {
 // consumes the whole input and returns errors wrapping plan.ErrBadQuery for
 // invalid grammar (including trailing tokens) and plan.ErrUnsupported for
 // valid LogQL Parkana defers (vector/vector binary operations with
-// on/ignoring/group_* matching, vector(), label_replace(), variants(),
+// on/ignoring/group_* matching, label_replace(), variants(),
 // rate_counter, approx_topk, | unpack, | decolorize, ip() filters and the
 // |> and !> pattern line filters).
 func Parse(q string) (Expr, error) {

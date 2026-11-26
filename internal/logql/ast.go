@@ -75,6 +75,8 @@ type LogQuery struct {
 
 func (*LogQuery) exprNode() {}
 
+// String renders the selector followed by the stages, line filters
+// separated by a space and every other stage by " | ".
 func (q *LogQuery) String() string {
 	var b strings.Builder
 	b.WriteString(q.Selector.String())
@@ -100,6 +102,7 @@ type LineFilter struct {
 
 func (*LineFilter) stageNode() {}
 
+// String renders the operator and the quoted values joined by " or ".
 func (f *LineFilter) String() string {
 	var b strings.Builder
 	b.WriteString(f.Op.String())
@@ -119,6 +122,7 @@ type NamedExtraction struct {
 	Path string
 }
 
+// String renders name="path".
 func (e NamedExtraction) String() string {
 	return e.Name + "=" + strconv.Quote(e.Path)
 }
@@ -132,6 +136,7 @@ type JSONParser struct {
 
 func (*JSONParser) stageNode() {}
 
+// String renders json with its comma-separated extractions.
 func (p *JSONParser) String() string {
 	var b strings.Builder
 	b.WriteString("json")
@@ -156,6 +161,8 @@ type LogfmtParser struct {
 
 func (*LogfmtParser) stageNode() {}
 
+// String renders logfmt with its --strict and --keep-empty flags and its
+// comma-separated extractions.
 func (p *LogfmtParser) String() string {
 	var b strings.Builder
 	b.WriteString("logfmt")
@@ -185,6 +192,7 @@ type RegexpParser struct {
 
 func (*RegexpParser) stageNode() {}
 
+// String renders regexp with the quoted pattern.
 func (p *RegexpParser) String() string {
 	return "regexp " + strconv.Quote(p.Pattern)
 }
@@ -227,6 +235,7 @@ type PatternParser struct {
 
 func (*PatternParser) stageNode() {}
 
+// String renders pattern with the quoted pattern.
 func (p *PatternParser) String() string {
 	return "pattern " + strconv.Quote(p.Pattern)
 }
@@ -239,6 +248,7 @@ type LineFormat struct {
 
 func (*LineFormat) stageNode() {}
 
+// String renders line_format with the quoted template.
 func (f *LineFormat) String() string {
 	return "line_format " + strconv.Quote(f.Template)
 }
@@ -254,6 +264,8 @@ type LabelReplacement struct {
 	IsTemplate bool
 }
 
+// String renders dest="template" for a template and dest=src for a
+// rename.
 func (r LabelReplacement) String() string {
 	if r.IsTemplate {
 		return r.Dest + "=" + strconv.Quote(r.Template)
@@ -269,6 +281,7 @@ type LabelFormat struct {
 
 func (*LabelFormat) stageNode() {}
 
+// String renders label_format with its comma-separated replacements.
 func (f *LabelFormat) String() string {
 	parts := make([]string, len(f.Replacements))
 	for i, r := range f.Replacements {
@@ -286,6 +299,7 @@ type DropTarget struct {
 	Matcher *plan.Matcher
 }
 
+// String renders the matcher when there is one, else the label name.
 func (t DropTarget) String() string {
 	if t.Matcher != nil {
 		return t.Matcher.String()
@@ -303,6 +317,7 @@ type Drop struct {
 
 func (*Drop) stageNode() {}
 
+// String renders drop with its comma-separated targets.
 func (d *Drop) String() string {
 	return dropKeepString("drop", d.Targets)
 }
@@ -316,6 +331,7 @@ type Keep struct {
 
 func (*Keep) stageNode() {}
 
+// String renders keep with its comma-separated targets.
 func (k *Keep) String() string {
 	return dropKeepString("keep", k.Targets)
 }
@@ -340,6 +356,7 @@ const (
 	UnwrapDurationSeconds
 )
 
+// String returns the conversion's LogQL name, or "" for UnwrapLabel.
 func (f UnwrapFunc) String() string {
 	switch f {
 	case UnwrapDuration:
@@ -365,6 +382,8 @@ type Unwrap struct {
 
 func (*Unwrap) stageNode() {}
 
+// String renders unwrap label or unwrap conv(label), then each post
+// filter after " | ".
 func (u *Unwrap) String() string {
 	var b strings.Builder
 	if u.Func == UnwrapLabel {
@@ -391,6 +410,7 @@ const (
 	OpComma                   // ,
 )
 
+// String returns "or", "and" or ",".
 func (op BoolOp) String() string {
 	switch op {
 	case OpFilterOr:
@@ -422,6 +442,8 @@ type LabelFilterBinary struct {
 func (*LabelFilterBinary) stageNode()       {}
 func (*LabelFilterBinary) labelFilterExpr() {}
 
+// String renders both sides joined by the operator, parenthesizing a side
+// that binds looser than it.
 func (n *LabelFilterBinary) String() string {
 	sep := " " + n.Op.String() + " "
 	if n.Op == OpComma {
@@ -455,6 +477,7 @@ const (
 	OpLabelLte                // <=
 )
 
+// String returns the operator's LogQL token, such as "=~" or ">=".
 func (op LabelOp) String() string {
 	switch op {
 	case OpLabelEq:
@@ -498,6 +521,8 @@ type FilterValue struct {
 	Bytes uint64        // BytesValue, matching Loki's uint64 byte tokens
 }
 
+// String renders the value as LogQL: a number, duration or byte size
+// literal, or a quoted string.
 func (v FilterValue) String() string {
 	switch v.Kind {
 	case NumberValue:
@@ -583,6 +608,7 @@ type LabelFilterLeaf struct {
 func (*LabelFilterLeaf) stageNode()       {}
 func (*LabelFilterLeaf) labelFilterExpr() {}
 
+// String renders label op value.
 func (f *LabelFilterLeaf) String() string {
 	return f.Label + " " + f.Op.String() + " " + f.Value.String()
 }
@@ -628,6 +654,8 @@ type LogRange struct {
 // and only range aggregations take one as their argument.
 func (*LogRange) exprNode() {}
 
+// String renders the pipeline, the unwrap stage if any, the [range] and
+// the offset when it is not zero.
 func (r *LogRange) String() string {
 	var b strings.Builder
 	b.WriteString(r.Pipeline.String())
@@ -666,6 +694,7 @@ const (
 	AbsentOverTime
 )
 
+// String returns the function's LogQL name, such as "count_over_time".
 func (f RangeFunc) String() string {
 	switch f {
 	case CountOverTime:
@@ -728,6 +757,7 @@ const (
 	SortDesc
 )
 
+// String returns the aggregation's LogQL name, such as "sum" or "topk".
 func (f VectorFunc) String() string {
 	switch f {
 	case Sum:
@@ -774,6 +804,8 @@ type Grouping struct {
 	Names   []string
 }
 
+// String renders by (names) or without (names); a nil Grouping renders
+// as "".
 func (g *Grouping) String() string {
 	if g == nil {
 		return ""
@@ -799,6 +831,7 @@ type RangeAgg struct {
 
 func (*RangeAgg) exprNode() {}
 
+// String renders func(params, range) followed by the grouping, if any.
 func (a *RangeAgg) String() string {
 	var b strings.Builder
 	b.WriteString(a.Func.String())
@@ -836,6 +869,7 @@ type VectorAgg struct {
 
 func (*VectorAgg) exprNode() {}
 
+// String renders func, the grouping if any, then (params, expr).
 func (a *VectorAgg) String() string {
 	var b strings.Builder
 	b.WriteString(a.Func.String())
@@ -882,6 +916,7 @@ const (
 	OpUnless              // unless
 )
 
+// String returns the operator's LogQL token, such as "+" or "unless".
 func (op BinOp) String() string {
 	switch op {
 	case OpAdd:
@@ -958,6 +993,8 @@ const (
 	MatchOneToMany           // group_right
 )
 
+// String returns "group_left" or "group_right", or "" for
+// MatchOneToOne.
 func (c MatchCard) String() string {
 	switch c {
 	case MatchManyToOne:
@@ -980,6 +1017,8 @@ type VectorMatching struct {
 	Include []string // the group_left/group_right argument labels
 }
 
+// String renders on (names) or ignoring (names), followed by the
+// group_left or group_right clause and its labels.
 func (m *VectorMatching) String() string {
 	keyword := "ignoring"
 	if m.On {
@@ -1008,6 +1047,8 @@ type BinaryExpr struct {
 
 func (*BinaryExpr) exprNode() {}
 
+// String renders lhs op [bool] [matching] rhs, parenthesizing an operand
+// when precedence or associativity requires it.
 func (e *BinaryExpr) String() string {
 	var b strings.Builder
 	b.WriteString(renderBinaryChild(e.LHS, e.Op, false))
@@ -1056,6 +1097,7 @@ type NumberLit struct {
 
 func (*NumberLit) exprNode() {}
 
+// String renders the number as a LogQL literal.
 func (l *NumberLit) String() string {
 	return formatNumber(l.V)
 }

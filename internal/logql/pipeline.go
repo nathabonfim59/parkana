@@ -13,6 +13,7 @@
 // in logEntry.err/errDetails, not in a label category: get and the typed
 // filters do not see it, while a parsed field that happens to carry one of
 // those names is an ordinary label. Process appends the state at output.
+
 package logql
 
 import (

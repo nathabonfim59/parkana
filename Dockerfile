@@ -1,9 +1,9 @@
 # Parkana container image.
 #
 # Builder and runtime are the same Debian release (bookworm, glibc 2.36) so the
-# binary sees the same glibc at build and run time. CGO stays enabled from
-# phase 1: DuckDB is linked through cgo later (PLAN.md §5, §9), and a fully
-# static build is explicitly not a goal (PLAN.md §11).
+# binary sees the same glibc at build and run time. CGO is enabled because
+# DuckDB is linked through cgo (PLAN.md §5, §9), and a fully static build is
+# explicitly not a goal (PLAN.md §11).
 #
 # Base images are pinned by tag AND manifest-list digest. The tag documents the
 # release while the digest makes the build reproducible even if the tag moves:
@@ -15,16 +15,18 @@
 #
 # Build (from the repository root):
 #
-#   docker build -t parkana:phase1 .
+#   docker build --build-arg PARKANA_VERSION=v1.0.0 -t parkana .
 #
-# The optional pushgen image-target is built from the same source for the
-# phase 2 compose stack; it is not part of the Parkana runtime image:
+# The optional pushgen image target is built from the same source for the
+# `phase2` profile of the compose stack in deploy/compose/; it is not part of
+# the Parkana runtime image:
 #
 #   docker build --target pushgen -t parkana-pushgen:phase2 .
 #
-# Run:
+# Run (docs/deploy.md has the full set of settings):
 #
-#   docker run -v parkana-data:/data -p 3100:3100 parkana:phase1
+#   docker run -d --name parkana -p 3100:3100 -v parkana-data:/data \
+#     -e PARKANA_DATA_DIR=/data parkana
 #
 # The compose stack in deploy/compose/ wires this image to the Garage
 # object store.
@@ -50,15 +52,15 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 
 # CGO_ENABLED=1 is the default with gcc present (the full bookworm golang
-# image ships a toolchain); it is set explicitly so the DuckDB dependency
-# (cgo) builds without touching this file again.
+# image ships a toolchain); it is set explicitly because the DuckDB driver
+# needs cgo.
 RUN CGO_ENABLED=1 \
     go build -trimpath \
         -ldflags "-X github.com/nathabonfim59/parkana/internal/version.Version=${PARKANA_VERSION}" \
         -o /out/parkana \
         ./cmd/parkana
 
-# pushgen is a small, CGO-free client used by the phase 2 compose stack to
+# pushgen is a small, CGO-free client used by the compose `phase2` profile to
 # feed a finite corpus through Alloy. Keeping it in the same build stage means
 # one source context and one module download for both targets.
 RUN CGO_ENABLED=0 go build -trimpath -o /out/pushgen ./cmd/pushgen

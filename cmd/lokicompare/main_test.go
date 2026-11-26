@@ -602,7 +602,7 @@ func TestRunHelp(t *testing.T) {
 		"lokicompare compares", "label_values consumes params.label", "Exit codes",
 		"-left", "-right", "-corpus", "-start", "-end", "-tenant", "-timeout",
 		"range, instant, labels", "volume_range", "expect", "wall-clock",
-		"bare {}", "docs/logql.md#stats-and-volume",
+		"bare {}", "docs/query/logql.md#stats-and-volume",
 	} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help does not contain %q", want)

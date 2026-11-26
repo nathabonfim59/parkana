@@ -12,6 +12,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"slices"
 	"sync"
 	"syscall"
 
@@ -346,40 +348,99 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 	info := version.Get()
 	log.Info("starting parkana", "version", info.Version, "revision", info.Revision, "roles", cfg.Roles)
 
-	store, err := app.OpenStore(cfg)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-	cat, err := app.OpenCatalog(cfg)
-	if err != nil {
-		return err
-	}
-	defer cat.Close()
-
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	srv := server.New(server.Options{Addr: cfg.HTTPAddr, Logger: log, Registry: reg, MultiTenant: cfg.MultiTenant})
-	lokiapi.RegisterBuildInfo(srv)
-
-	pipes, err := newPipelineWiring(cfg, log, cat, reg)
+	a, err := assemble(ctx, cfg, log, reg, reg)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = pipes.close() }()
+	defer a.close()
+
+	return app.Run(ctx, log, a.services)
+}
+
+// assembly is a wired process that has not started serving: the HTTP server
+// with every route registered, the services app.Run starts, and the release
+// of what assemble opened.
+type assembly struct {
+	srv      *server.Server
+	services map[string]app.Service
+	// close releases the pipeline registries, the catalog, the store and the
+	// role locks, in that order. Call it once, after the services returned.
+	close func()
+}
+
+// assemble takes the role locks (roleLocks), opens the store and the catalog,
+// then builds the HTTP server, the pipeline API and every role service of
+// cfg, and registers the 501 placeholders last. Roles register their
+// collectors on metrics (their Deps.Metrics); the server registers its own on
+// gather and serves gather on
+// /metrics. run passes the same registry as both; they are separate so the
+// metrics test can record what roles register while the server still gathers
+// from a real registry. When assemble fails it has already released
+// everything it opened.
+func assemble(ctx context.Context, cfg config.Config, log *slog.Logger, metrics prometheus.Registerer, gather *prometheus.Registry) (_ *assembly, err error) {
+	// closers run last-in first-out, as the deferred closes of a single
+	// function would.
+	var closers []func()
+	release := func() {
+		for _, c := range slices.Backward(closers) {
+			c()
+		}
+	}
+	defer func() {
+		if err != nil {
+			release()
+		}
+	}()
+
+	// The role locks come first, so a second process of a role fails before
+	// it opens anything, and go last, after every service and the store and
+	// catalog were released.
+	locks, err := roleLocks(cfg)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range locks {
+		unlock, err := l.take()
+		if err != nil {
+			return nil, err
+		}
+		closers = append(closers, func() { _ = unlock() })
+	}
+
+	store, err := app.OpenStore(cfg)
+	if err != nil {
+		return nil, err
+	}
+	closers = append(closers, func() { store.Close() })
+	cat, err := app.OpenCatalog(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	closers = append(closers, func() { cat.Close() })
+
+	srv := server.New(server.Options{Addr: cfg.HTTPAddr, Logger: log, Registry: gather, MultiTenant: cfg.MultiTenant})
+	lokiapi.RegisterBuildInfo(srv)
+
+	pipes, err := newPipelineWiring(cfg, log, cat, metrics)
+	if err != nil {
+		return nil, err
+	}
+	closers = append(closers, func() { _ = pipes.close() })
 	if cfg.Has(config.RoleIngester) || cfg.Has(config.RoleQuerier) {
 		if err := pipes.registerAPI(srv); err != nil {
-			return fmt.Errorf("pipeline api: %w", err)
+			return nil, fmt.Errorf("pipeline api: %w", err)
 		}
 	}
 
-	deps := app.Deps{Config: cfg, Logger: log, Store: store, Catalog: cat, HTTP: srv, Metrics: reg}
+	deps := app.Deps{Config: cfg, Logger: log, Store: store, Catalog: cat, HTTP: srv, Metrics: metrics}
 	services := map[string]app.Service{"http": srv}
 	assembled := make([]app.Service, 0, len(cfg.Roles))
 	for _, role := range cfg.Roles {
 		factory, err := pipes.roleFactory(role)
 		if err != nil {
-			return errors.Join(fmt.Errorf("role %s: %w", role, err), releaseServices(assembled))
+			return nil, errors.Join(fmt.Errorf("role %s: %w", role, err), releaseServices(assembled))
 		}
 		if factory == nil {
 			log.Warn("role not implemented yet; skipping", "role", role)
@@ -391,14 +452,81 @@ func run(ctx context.Context, args []string, getenv func(string) string, stderr 
 			// running only in the caller's hands; this process is aborting, so
 			// release what was already constructed for the roles that will
 			// never start.
-			return errors.Join(fmt.Errorf("role %s: %w", role, err), releaseServices(assembled))
+			return nil, errors.Join(fmt.Errorf("role %s: %w", role, err), releaseServices(assembled))
 		}
 		assembled = append(assembled, svc)
 		services[string(role)] = svc
 	}
 	lokiapi.RegisterUnimplemented(srv)
 
-	return app.Run(ctx, log, services)
+	return &assembly{srv: srv, services: services, close: release}, nil
+}
+
+// roleLock is the lock one role holds on the local directories it owns.
+type roleLock struct {
+	role config.Role
+	path string
+	// conflict says what two holders would share and how to fix it.
+	conflict string
+}
+
+// roleLocks returns the locks of the enabled roles that own local state, so
+// two processes of one role cannot share it while different roles may share
+// one -data.dir:
+//   - the ingester owns <data.dir>/wal and <data.dir>/parquet, guarded by
+//     <data.dir>/ingester.lock;
+//   - the querier owns its object cache, guarded by <cache dir>.lock beside
+//     it. Not inside: the cache's startup scan deletes every file that is not
+//     a cached object. Beside it also catches two queriers with different
+//     data dirs but one -querier.cache-dir.
+//
+// The compactor writes under -data.dir only through the defaults of the
+// catalog (SQLite, safe for several processes) and the fs object store
+// (shared by design), so it takes no lock; its one-per-catalog rule is not
+// a property of a directory. The scheduler is not implemented.
+func roleLocks(cfg config.Config) ([]roleLock, error) {
+	var locks []roleLock
+	// An empty -data.dir is the ingester's own startup error; do not lock
+	// the working directory for it.
+	if cfg.Has(config.RoleIngester) && cfg.DataDir != "" {
+		dir, err := filepath.Abs(cfg.DataDir)
+		if err != nil {
+			return nil, fmt.Errorf("ingester lock: %w", err)
+		}
+		locks = append(locks, roleLock{
+			role: config.RoleIngester,
+			path: filepath.Join(dir, "ingester.lock"),
+			conflict: fmt.Sprintf("two ingesters cannot share -data.dir %s; stop the other ingester "+
+				"or give this one its own -data.dir", dir),
+		})
+	}
+	if cfg.Has(config.RoleQuerier) {
+		// Abs also cleans: a trailing separator would put the lock inside.
+		cache, err := filepath.Abs(cfg.Querier.CachePath(cfg.DataDir))
+		if err != nil {
+			return nil, fmt.Errorf("querier lock: %w", err)
+		}
+		locks = append(locks, roleLock{
+			role: config.RoleQuerier,
+			path: cache + ".lock",
+			conflict: fmt.Sprintf("two queriers cannot share the cache dir %s; stop the other querier "+
+				"or give this one its own -querier.cache-dir", cache),
+		})
+	}
+	return locks, nil
+}
+
+// take acquires the lock, explaining a held one in terms of the role.
+func (l roleLock) take() (unlock func() error, err error) {
+	unlock, err = app.LockFile(l.path)
+	if held, ok := errors.AsType[*app.LockHeldError](err); ok {
+		return nil, fmt.Errorf("%s lock %s is held by another parkana process (%s): %s",
+			l.role, held.Path, held.Holder(), l.conflict)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s lock: %w", l.role, err)
+	}
+	return unlock, nil
 }
 
 func newLogger(cfg config.Config, w io.Writer) *slog.Logger {

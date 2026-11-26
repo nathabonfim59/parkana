@@ -1,0 +1,54 @@
+# Parkana Postgres catalog overlay for the development stack.
+#
+# The base compose.yaml keeps the SQLite catalog. Apply this overlay with the
+# base file to run Parkana against a PostgreSQL catalog instead:
+#
+#   cd deploy/compose
+#   docker compose -f compose.yaml -f postgres.yaml --profile postgres up -d
+#
+# It can be combined with the other overlays and profiles, e.g.
+# `-f compose.yaml -f postgres.yaml -f sql.yaml --profile phase2 --profile postgres`.
+#
+#   * the postgres service only exists under the postgres profile, so always
+#     pass --profile postgres with this file (parkana depends on it);
+#   * Parkana creates and migrates its catalog tables at startup; the image
+#     needs no extension;
+#   * the database has no host port; inspect it with
+#         docker compose -f compose.yaml -f postgres.yaml --profile postgres \
+#           exec postgres psql -U parkana parkana
+#   * PARKANA_DEV_POSTGRES_PASSWORD overrides the throwaway password below. It
+#     is for this local stack only; in production keep the DSN in
+#     PARKANA_CATALOG_DSN from a secret, not in a compose file;
+#   * POSTGRES_IMAGE overrides the image (tag only, not pinned by digest).
+#
+# The SQLite catalog in the parkana-data volume is not migrated: switching
+# this overlay on or off starts from an empty catalog of the other kind, while
+# the Garage objects stay. Use a fresh stack (`down -v`) when switching.
+
+services:
+  postgres:
+    profiles: ["postgres"]
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    environment:
+      POSTGRES_USER: parkana
+      POSTGRES_PASSWORD: ${PARKANA_DEV_POSTGRES_PASSWORD:-parkana-dev}
+      POSTGRES_DB: parkana
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "parkana", "-d", "parkana"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  parkana:
+    environment:
+      PARKANA_CATALOG_DRIVER: postgres
+      PARKANA_CATALOG_DSN: postgres://parkana:${PARKANA_DEV_POSTGRES_PASSWORD:-parkana-dev}@postgres:5432/parkana?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:

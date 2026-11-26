@@ -1,20 +1,15 @@
 package catalog
 
 import (
-	"cmp"
 	"context"
 	"database/sql"
 	"embed"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"io/fs"
 	"iter"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -142,55 +137,18 @@ func sqliteDSN(filePath string, pragmas ...string) string {
 	return "file:" + (&url.URL{Path: filePath}).EscapedPath() + "?" + q.Encode()
 }
 
-// migration is one embedded, ordered schema change.
-type migration struct {
-	version int
-	name    string
-	stmt    string
-}
-
-// loadMigrations reads and validates the embedded migrations, ordered by
-// version. Each file is named {version}_{description}.sql and holds exactly one
-// SQL statement: modernc.org/sqlite prepares only the first statement of a
+// loadMigrations reads and validates the embedded SQLite migrations, ordered
+// by version. Each file is named {version}_{description}.sql and holds exactly
+// one SQL statement: modernc.org/sqlite prepares only the first statement of a
 // multi-statement string, so a second statement would silently never run.
 func loadMigrations() ([]migration, error) {
-	entries, err := fs.ReadDir(sqliteMigrations, migrationsDir)
+	migrations, err := readMigrations(sqliteMigrations, migrationsDir)
 	if err != nil {
-		return nil, fmt.Errorf("catalog: sqlite: read migrations: %w", err)
+		return nil, fmt.Errorf("catalog: sqlite: %w", err)
 	}
-	migrations := make([]migration, 0, len(entries))
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".sql") {
-			continue
-		}
-		prefix, _, ok := strings.Cut(name, "_")
-		if !ok {
-			return nil, fmt.Errorf("catalog: sqlite: migration %s: name must be {version}_{description}.sql", name)
-		}
-		version, err := strconv.Atoi(prefix)
-		if err != nil || version <= 0 {
-			return nil, fmt.Errorf("catalog: sqlite: migration %s: invalid version prefix %q", name, prefix)
-		}
-		body, err := fs.ReadFile(sqliteMigrations, path.Join(migrationsDir, name))
-		if err != nil {
-			return nil, fmt.Errorf("catalog: sqlite: read migration %s: %w", name, err)
-		}
-		stmt, err := migrationStatement(name, string(body))
-		if err != nil {
+	for i, m := range migrations {
+		if migrations[i].stmt, err = migrationStatement(m.name, m.stmt); err != nil {
 			return nil, err
-		}
-		migrations = append(migrations, migration{version: version, name: name, stmt: stmt})
-	}
-	if len(migrations) == 0 {
-		return nil, errors.New("catalog: sqlite: no migrations embedded")
-	}
-	slices.SortFunc(migrations, func(a, b migration) int {
-		return cmp.Compare(a.version, b.version)
-	})
-	for i := 1; i < len(migrations); i++ {
-		if migrations[i].version == migrations[i-1].version {
-			return nil, fmt.Errorf("catalog: sqlite: duplicate migration version %d", migrations[i].version)
 		}
 	}
 	return migrations, nil
@@ -211,6 +169,8 @@ func migrationStatement(name, body string) (string, error) {
 
 // migrate creates the migration ledger and applies every migration whose
 // version is newer than the recorded maximum, one transaction per migration.
+// A recorded maximum above every embedded migration fails with
+// ErrSchemaTooNew before anything is written.
 func migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		"version" INTEGER PRIMARY KEY,
@@ -226,6 +186,9 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	migrations, err := loadMigrations()
 	if err != nil {
 		return err
+	}
+	if err := checkSchemaVersion(current, migrations); err != nil {
+		return fmt.Errorf("catalog: sqlite: %w", err)
 	}
 	for _, m := range migrations {
 		if m.version <= current {
@@ -252,26 +215,6 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
-// microsFloor returns t in whole Unix microseconds rounded toward negative
-// infinity. It is the representation stored in the database.
-func microsFloor(t time.Time) int64 { return t.UnixMicro() }
-
-// microsCeil returns t in whole Unix microseconds rounded toward positive
-// infinity. Stored timestamps are integer microseconds, so for such a value m:
-//
-//	m >= t   iff  m >= microsCeil(t)
-//	m < t    iff  m <  microsCeil(t)
-//
-// That keeps sub-microsecond filter bounds and purge cutoffs exact instead of
-// silently widening or narrowing them when t is truncated to microseconds.
-func microsCeil(t time.Time) int64 {
-	us := t.UnixMicro()
-	if t.Nanosecond()%1000 != 0 {
-		us++
-	}
-	return us
-}
-
 // AddFiles implements Catalog.
 func (s *SQLite) AddFiles(ctx context.Context, files ...File) error {
 	if err := ctx.Err(); err != nil {
@@ -292,16 +235,11 @@ func (s *SQLite) AddFiles(ctx context.Context, files ...File) error {
 		return fmt.Errorf("catalog: sqlite: add files: %w", err)
 	}
 	defer check.Close()
-	seen := make(map[string]struct{}, len(files))
+	seen := make(batchKeys, len(files))
 	for _, f := range files {
-		if err := f.Tenant.Validate(); err != nil {
+		if err := seen.check(f); err != nil {
 			return err
 		}
-		id := string(f.Tenant) + "\x00" + f.Key
-		if _, ok := seen[id]; ok {
-			return fmt.Errorf("%w: %s", ErrExists, f.Key)
-		}
-		seen[id] = struct{}{}
 		var exists int64
 		if err := check.QueryRowContext(ctx, string(f.Tenant), f.Key).Scan(&exists); err != nil {
 			return fmt.Errorf("catalog: sqlite: check %s: %w", f.Key, err)
@@ -360,16 +298,11 @@ func (s *SQLite) ReplaceFiles(ctx context.Context, t tenant.ID, remove []string,
 		return fmt.Errorf("catalog: sqlite: replace files: %w", err)
 	}
 	defer checkAny.Close()
-	seen := make(map[string]struct{}, len(add))
+	seen := make(batchKeys, len(add))
 	for _, f := range add {
-		if err := f.Tenant.Validate(); err != nil {
+		if err := seen.check(f); err != nil {
 			return err
 		}
-		id := string(f.Tenant) + "\x00" + f.Key
-		if _, ok := seen[id]; ok {
-			return fmt.Errorf("%w: %s", ErrExists, f.Key)
-		}
-		seen[id] = struct{}{}
 		var exists int64
 		if err := checkAny.QueryRowContext(ctx, string(f.Tenant), f.Key).Scan(&exists); err != nil {
 			return fmt.Errorf("catalog: sqlite: check %s: %w", f.Key, err)
@@ -406,183 +339,47 @@ func (s *SQLite) ReplaceFiles(ctx context.Context, t tenant.ID, remove []string,
 	return nil
 }
 
-// insertFiles inserts files inside tx. A zero CreatedAt is replaced with now,
-// matching Memory. A zero DeletedAt is stored as SQL NULL ("live"); a nonzero
-// one is preserved, so an explicitly pre-deleted file keeps its deletion time
-// (including Unix epoch, which is distinct from zero).
+// insertFiles inserts files inside tx; see fileInsertValues for the stored
+// values.
 func insertFiles(ctx context.Context, tx *sql.Tx, files []File, now time.Time) error {
 	if len(files) == 0 {
 		return nil
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO files (
-		"tenant", "stream", "key", "min_ts", "max_ts", "rows", "bytes",
-		"label_values", "labels_complete", "has_sidecar", "created_at", "deleted_at"
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO files (`+fileColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return fmt.Errorf("catalog: sqlite: prepare insert: %w", err)
 	}
 	defer stmt.Close()
 	for _, f := range files {
-		labels, err := json.Marshal(f.LabelValues)
+		values, err := fileInsertValues(f, now, sqliteFlag)
 		if err != nil {
-			return fmt.Errorf("catalog: sqlite: encode labels for %s: %w", f.Key, err)
+			return fmt.Errorf("catalog: sqlite: %w", err)
 		}
-		created := f.CreatedAt
-		if created.IsZero() {
-			created = now
-		}
-		var sidecar, complete int64
-		if f.HasSidecar {
-			sidecar = 1
-		}
-		if f.LabelsComplete {
-			complete = 1
-		}
-		var deleted any
-		if !f.DeletedAt.IsZero() {
-			deleted = microsFloor(f.DeletedAt)
-		}
-		if _, err := stmt.ExecContext(ctx,
-			string(f.Tenant), f.Stream, f.Key,
-			microsFloor(f.MinTS), microsFloor(f.MaxTS),
-			f.Rows, f.Bytes, string(labels), complete, sidecar, created.UnixMicro(), deleted,
-		); err != nil {
+		if _, err := stmt.ExecContext(ctx, values...); err != nil {
 			return fmt.Errorf("catalog: sqlite: insert %s: %w", f.Key, err)
 		}
 	}
 	return nil
 }
 
+// sqliteFlag stores a boolean as INTEGER 0 or 1.
+func sqliteFlag(b bool) any {
+	if b {
+		return int64(1)
+	}
+	return int64(0)
+}
+
 // ListFiles implements Catalog. Stream, tenant and time filtering run in SQL;
 // the label Match constraint is applied with Filter.Matches so its
 // "files without the label are kept" rule stays exact.
 func (s *SQLite) ListFiles(ctx context.Context, flt Filter) iter.Seq2[File, error] {
-	return func(yield func(File, error) bool) {
-		if err := ctx.Err(); err != nil {
-			yield(File{}, err)
-			return
-		}
-		query, args := listQuery(flt)
-		rows, err := s.read.QueryContext(ctx, query, args...)
-		if err != nil {
-			yield(File{}, fmt.Errorf("catalog: sqlite: list files: %w", err))
-			return
-		}
-		defer rows.Close()
-		for rows.Next() {
-			if err := ctx.Err(); err != nil {
-				yield(File{}, err)
-				return
-			}
-			f, err := scanFile(rows)
-			if err != nil {
-				yield(File{}, fmt.Errorf("catalog: sqlite: list files: %w", err))
-				return
-			}
-			if !flt.Matches(f) {
-				continue
-			}
-			if !yield(f, nil) {
-				return
-			}
-		}
-		if err := rows.Err(); err != nil {
-			yield(File{}, fmt.Errorf("catalog: sqlite: list files: %w", err))
-		}
-	}
-}
-
-// listQuery builds the ListFiles statement. Time bounds are exact for stored
-// microsecond timestamps: a file's MaxTS must be >= From, its MinTS <= Through.
-func listQuery(flt Filter) (string, []any) {
-	var b strings.Builder
-	b.WriteString(`SELECT "tenant", "stream", "key", "min_ts", "max_ts", "rows", "bytes", "label_values", "labels_complete", "has_sidecar", "created_at", "deleted_at" FROM files WHERE "tenant" = ?`)
-	args := []any{string(flt.Tenant)}
-	if flt.Stream != "" {
-		b.WriteString(` AND "stream" = ?`)
-		args = append(args, flt.Stream)
-	}
-	if !flt.IncludeDeleted {
-		b.WriteString(` AND "deleted_at" IS NULL`)
-	}
-	if !flt.From.IsZero() {
-		b.WriteString(` AND "max_ts" >= ?`)
-		args = append(args, microsCeil(flt.From))
-	}
-	if !flt.Through.IsZero() {
-		b.WriteString(` AND "min_ts" <= ?`)
-		args = append(args, microsFloor(flt.Through))
-	}
-	b.WriteString(` ORDER BY "min_ts", "key"`)
-	return b.String(), args
-}
-
-// rowScanner is satisfied by *sql.Row and *sql.Rows.
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-// scanFile decodes one files row.
-func scanFile(row rowScanner) (File, error) {
-	var (
-		f          File
-		tenantID   string
-		labels     string
-		sidecar    int64
-		complete   int64
-		minTS      int64
-		maxTS      int64
-		createdTS  int64
-		deletedTSP sql.NullInt64
-	)
-	if err := row.Scan(&tenantID, &f.Stream, &f.Key, &minTS, &maxTS, &f.Rows, &f.Bytes,
-		&labels, &complete, &sidecar, &createdTS, &deletedTSP); err != nil {
-		return File{}, err
-	}
-	f.Tenant = tenant.ID(tenantID)
-	f.MinTS = time.UnixMicro(minTS).UTC()
-	f.MaxTS = time.UnixMicro(maxTS).UTC()
-	f.CreatedAt = time.UnixMicro(createdTS).UTC()
-	if deletedTSP.Valid {
-		f.DeletedAt = time.UnixMicro(deletedTSP.Int64).UTC()
-	}
-	f.HasSidecar = sidecar != 0
-	f.LabelsComplete = complete != 0
-	if labels != "" && labels != "null" {
-		if err := json.Unmarshal([]byte(labels), &f.LabelValues); err != nil {
-			return File{}, fmt.Errorf("decode labels for %s: %w", f.Key, err)
-		}
-	}
-	return f, nil
+	return listFiles(ctx, s.read, flt, sqliteDialect)
 }
 
 // Streams implements Catalog.
 func (s *SQLite) Streams(ctx context.Context, t tenant.ID) ([]string, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	rows, err := s.read.QueryContext(ctx,
-		`SELECT DISTINCT "stream" FROM files WHERE "tenant" = ? AND "deleted_at" IS NULL ORDER BY "stream"`,
-		string(t))
-	if err != nil {
-		return nil, fmt.Errorf("catalog: sqlite: streams: %w", err)
-	}
-	defer rows.Close()
-	var streams []string
-	for rows.Next() {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		var stream string
-		if err := rows.Scan(&stream); err != nil {
-			return nil, fmt.Errorf("catalog: sqlite: streams: %w", err)
-		}
-		streams = append(streams, stream)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("catalog: sqlite: streams: %w", err)
-	}
-	return streams, nil
+	return listStreams(ctx, s.read, t, sqliteDialect)
 }
 
 // SetSidecar implements Catalog.

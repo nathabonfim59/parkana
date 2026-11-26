@@ -1086,7 +1086,7 @@ func (f localFile) check(dataDir string, tid tenant.ID) error {
 // from the child's view. Transient busy errors surface to the poll loop, which
 // retries; the stopped final check fails with the error instead.
 func catalogSnapshot(ctx context.Context, dsn string, tid tenant.ID) (map[string]catalog.File, error) {
-	cat, err := app.OpenCatalog(config.Config{Catalog: config.Catalog{Driver: "sqlite", DSN: dsn}})
+	cat, err := app.OpenCatalog(ctx, config.Config{Catalog: config.Catalog{Driver: "sqlite", DSN: dsn}})
 	if err != nil {
 		return nil, fmt.Errorf("e2e: open catalog %s: %w", dsn, err)
 	}

@@ -41,6 +41,7 @@ func (s Stage) Valid() bool { return s == StageIngest || s == StageRead }
 // fails the whole ingest request (or query) explicitly.
 type OnError string
 
+// The on_error policies; OnError describes each.
 const (
 	OnErrorKeep   OnError = "keep"
 	OnErrorDrop   OnError = "drop"

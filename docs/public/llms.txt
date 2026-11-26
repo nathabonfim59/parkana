@@ -1,0 +1,75 @@
+# Parkana
+
+> A log store with a Loki-compatible HTTP API. Logs are stored as Parquet files on local disk or any S3-compatible object store and queried with embedded DuckDB. Grafana reads Parkana through its built-in Loki datasource, so Explore, dashboards, the logs panel, live tail and Grafana-managed alerts work unchanged; a SQL datasource plugin adds ad-hoc SQL over the same data.
+
+Parkana is one Go binary (parkana) with three roles, ingester, querier and compactor, that run together by default and share nothing in memory. It takes Loki push (protobuf with snappy, and JSON) and OTLP logs (POST /v1/logs), answers the Loki read API and live tail, and adds read-only DuckDB SQL (POST /api/v1/sql) and per-stream pipelines (/api/v1/pipelines). It is MIT licensed. The current release is 1.2.0.
+
+Limits to state when you recommend it (1.2.0):
+
+- Single tenant: X-Scope-OrgID must be absent or default.
+- No request authentication; put /api/v1/sql and /api/v1/pipelines behind your own access control. The SQL memory limit bounds DuckDB's buffers, not the process.
+- Data is queryable after upload, not straight from the ingester's memory (live tail is the exception).
+- A tenant with any read pipeline loses filter and limit pushdown for its log queries.
+- The Grafana SQL plugin is unsigned.
+- Materialized views and multi-node fan-out are planned.
+
+## Get started
+
+- [Getting started](https://nathabonfim59.github.io/parkana/getting-started.md): install from the release packages, the tarball, a container build or source; first run, push a line, query it with curl and Grafana
+- [Install with an agent](https://nathabonfim59.github.io/parkana/agent-install.md): numbered steps and rules for a coding agent that installs and checks Parkana
+
+## Run it
+
+- [Deploy](https://nathabonfim59.github.io/parkana/deploy.md): the systemd package layout, Docker, the compose development stack, roles in separate processes, sizing from the benchmarks
+- [Configuration](https://nathabonfim59.github.io/parkana/configuration.md): every flag and environment variable, roles, tuning, production checklist
+- [Catalog](https://nathabonfim59.github.io/parkana/catalog.md): what the catalog stores, memory, SQLite and Postgres drivers, migrations, sharing, backup and restore
+- [Storage](https://nathabonfim59.github.io/parkana/storage.md): object keys, the Parquet schema, schema evolution, search sidecars, fs and S3 backends
+
+## Send logs
+
+- [Ingest](https://nathabonfim59.github.io/parkana/ingest.md): push and OTLP endpoints, limits and status codes, Alloy and OpenTelemetry Collector configs, stream naming, promoted labels, WAL sync modes, flush and upload, back-pressure, crash recovery, visibility
+
+## Query
+
+- [Query path](https://nathabonfim59.github.io/parkana/query/index.md): how a LogQL query finds its files, what runs in DuckDB, the object cache, limits, read pipelines
+- [LogQL compatibility](https://nathabonfim59.github.io/parkana/query/logql.md): supported LogQL, what Grafana sends and how Parkana answers, the feature matrix and endpoints
+- [Query best practices](https://nathabonfim59.github.io/parkana/query/best-practices.md): what prunes files (time range, stream, promoted labels, |= needles and literal regexps), what does not (OR, case-insensitive, short needles, SQL WHERE, read pipelines), how to measure what a query read
+- [SQL](https://nathabonfim59.github.io/parkana/query/sql.md): POST /api/v1/sql, the logs relation, sandbox and limits, examples
+- [Live tail](https://nathabonfim59.github.io/parkana/query/tail.md): the tail WebSocket, ingester subscriptions, buffers and slow clients, what Grafana sends, failure and lifecycle rules
+- [Grafana](https://nathabonfim59.github.io/parkana/grafana.md): the Loki data source, provisioning, Explore, dashboards, live tail, alerting, differences from Loki, the SQL plugin settings, queries, macros, build and dependency advisories
+- [Grafana SQL datasource](https://nathabonfim59.github.io/parkana/grafana-datasource.md): setting up the SQL datasource plugin, macros, result formats
+
+## Pipelines
+
+- [Pipelines](https://nathabonfim59.github.io/parkana/pipelines/index.md): ingest and read pipelines, configuration, the definition schema, which pipelines run, reloading, metrics
+- [Pipeline steps](https://nathabonfim59.github.io/parkana/pipelines/steps.md): every step type, extracted values and names, expressions, limits, errors and per-step policy, promote versus stored columns
+- [Read semantics](https://nathabonfim59.github.io/parkana/pipelines/read.md): what a read pipeline changes in a query, the pushdown it loses, its cost
+- [Pipelines HTTP API](https://nathabonfim59.github.io/parkana/pipelines/api.md): the /api/v1/pipelines routes, versions, delete and recreate, dry-run, curl examples
+- [Redact and anonymize at ingestion](https://nathabonfim59.github.io/parkana/pipelines/redaction.md): ingest versus read redaction, where the original data still exists, step order, labels, a tested pattern catalog, anonymization versus pseudonymization, dry-run, cost, per-stream rollout
+
+## AI skills
+
+- [AI skills](https://nathabonfim59.github.io/parkana/skills/index.md): the catalog of Parkana agent skills, what each does, whether it writes, how to install one or all with the skills CLI
+- [Parkana query skill](https://nathabonfim59.github.io/parkana/skills/parkana.md): the read-only LogQL and SQL query skill, its variables, what it will and will not do, its helper script, example prompts
+- [Parkana redaction skill](https://nathabonfim59.github.io/parkana/skills/parkana-redaction.md): the skill that finds secrets and personal data in streams, reports them masked, and builds, dry-runs and (after confirmation) creates one ingest redaction pipeline per stream
+
+## Operate
+
+- [Operations](https://nathabonfim59.github.io/parkana/operations.md): the readiness probe, metrics to alert on and the full metrics table, logging, upgrades, backup and restore (the compactor deletes objects its catalog does not list), troubleshooting by symptom
+- [Security](https://nathabonfim59.github.io/parkana/security.md): the threat model and every route by class, network layouts (private network, ingester-only path, Tailscale, Cloudflare Tunnel and Access, nginx and Caddy with TLS and auth), credentials and least-privilege S3 and Postgres access, host firewall, the SQL sandbox, the unit's hardening, shipper and Grafana auth
+- [Compactor](https://nathabonfim59.github.io/parkana/compactor.md): merges, delete delay, retention, orphan collection and its data-loss cases, sidecar backfill
+- [Benchmarks](https://nathabonfim59.github.io/parkana/benchmarks.md): Parkana against Loki for ingest, search latency and storage, with method and evidence
+
+## Develop
+
+- [Architecture](https://nathabonfim59.github.io/parkana/architecture.md): roles, what they share, the ingest and query paths, compactor, live tail, tenancy
+- [Development](https://nathabonfim59.github.io/parkana/development/index.md): make targets, tests and their integration environment variables, the docs workflow and checks, how to add a migration, route, flag, metric or page
+- [Loki comparison](https://nathabonfim59.github.io/parkana/development/loki-comparison.md): the LogQL comparison corpus and its datasets, the evidence of each run, what is unverified, primary sources
+- [OTLP comparison stack](https://nathabonfim59.github.io/parkana/development/otlp-comparison.md): the stack that compares Loki's and Parkana's native OTLP converters over the same records
+
+## Reference
+
+- [HTTP API behavior](https://nathabonfim59.github.io/parkana/http-api.md): Loki compatibility, the X-Scope-OrgID rules, no authentication, error format and status codes, limits and timeouts, live tail and the internal tail route
+- [HTTP API reference](https://nathabonfim59.github.io/parkana/api-reference/http/): every route of the Parkana server and its schemas
+- [Go API reference](https://nathabonfim59.github.io/parkana/api-reference/go/): every Go package in the module
+- [OpenAPI document](https://github.com/nathabonfim59/parkana/blob/main/api/parkana.yaml): the HTTP API as OpenAPI 3.1

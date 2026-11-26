@@ -8,10 +8,13 @@
 //	(*CompiledLogQuery).Matchers() []plan.Matcher
 //	(*CompiledLogQuery).Process(ctx context.Context, t tenant.ID, r plan.Row) (logs.Labels, plan.Entry, bool, error)
 //
-// A4 implements stored log execution and line filters. Metric and scalar
-// expressions, parsers, label filters and formatting stages are later phases
-// (A5-A9) and return plan.ErrUnsupported until they land; no stage is ever
-// silently skipped.
+// Log and metric queries, scalar and binary expressions, parsers, label
+// filters and formatting stages are implemented. Recognized LogQL outside that
+// set, such as | unpack, | decolorize, label_replace, rate_counter, ip()
+// filters, on/ignoring/group_left/group_right vector matching, the and/or/unless
+// set operations and template helpers outside the allowlist, returns
+// plan.ErrUnsupported; no stage is ever silently skipped. docs/query/logql.md
+// lists what is supported.
 package logql
 
 import (

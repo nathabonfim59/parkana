@@ -43,6 +43,7 @@ const (
 	OutcomeDrop
 )
 
+// String returns "keep", "stop" or "drop".
 func (o Outcome) String() string {
 	switch o {
 	case OutcomeKeep:
@@ -72,6 +73,7 @@ type RejectError struct {
 	Details  string
 }
 
+// Error names the pipeline and step that rejected the entry, and why.
 func (e *RejectError) Error() string {
 	return fmt.Sprintf("pipeline %s rejected at %s: %s", e.Pipeline, e.Step, e.Details)
 }

@@ -8,3 +8,9 @@
 /.tty59/
 /dist/
 /.build/
+
+# Documentation site: dependencies, build output and the generated API reference
+/node_modules/
+/site/.vitepress/cache/
+/site/.vitepress/dist/
+/docs/api-reference/

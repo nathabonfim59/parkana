@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/nathabonfim59/parkana/internal/catalog"
+	"github.com/nathabonfim59/parkana/internal/catalog/catalogtest"
 	"github.com/nathabonfim59/parkana/internal/logs"
 	"github.com/nathabonfim59/parkana/internal/pipeline"
 	"github.com/nathabonfim59/parkana/internal/tenant"
@@ -1116,6 +1117,29 @@ func TestRegistryCatalogBackendsConverge(t *testing.T) {
 			if err != nil {
 				a.Close()
 				t.Fatalf("second NewSQLite: %v", err)
+			}
+			t.Cleanup(func() {
+				if err := b.Close(); err != nil {
+					t.Errorf("closing second catalog: %v", err)
+				}
+				if err := a.Close(); err != nil {
+					t.Errorf("closing first catalog: %v", err)
+				}
+			})
+			return a, b
+		}},
+		// Two independent handles on one schema, as two processes would
+		// open it; skips unless PARKANA_TEST_POSTGRES_DSN is set.
+		{"postgres", func(t *testing.T) (catalog.Catalog, catalog.Catalog) {
+			dsn := catalogtest.PostgresDSN(t)
+			a, err := catalog.NewPostgres(t.Context(), dsn)
+			if err != nil {
+				t.Fatalf("NewPostgres: %v", err)
+			}
+			b, err := catalog.NewPostgres(t.Context(), dsn)
+			if err != nil {
+				a.Close()
+				t.Fatalf("second NewPostgres: %v", err)
 			}
 			t.Cleanup(func() {
 				if err := b.Close(); err != nil {

@@ -931,12 +931,17 @@ func TestServicePeriodicFlushSeals(t *testing.T) {
 }
 
 // An empty push still advances the manifest frontier through publication.
-func TestServiceEmptyPushAdvancesFrontier(t *testing.T) {
+// A push without entries is acknowledged without a WAL record, so it takes
+// no sequence and the manifest frontier stays where it was.
+func TestServiceEmptyPushSkipsWAL(t *testing.T) {
 	deps, _ := testDeps(t, t.TempDir())
 	s := newTestService(t, deps, serviceOptions{})
 	cancel, done := startRun(t, s)
 	waitReady(t, s)
 	if err := s.append(t.Context(), tenant.Default, &logs.PushRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.append(t.Context(), tenant.Default, pushReq()); err != nil {
 		t.Fatal(err)
 	}
 	cancel()
@@ -953,8 +958,50 @@ func TestServiceEmptyPushAdvancesFrontier(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fr.Last != 1 {
-		t.Fatalf("manifest frontier %d, want 1 after empty push", fr.Last)
+	if fr.Last != 0 {
+		t.Fatalf("manifest frontier %d, want 0 after empty pushes", fr.Last)
+	}
+}
+
+// service.append enqueues nothing for a push without entries (no streams, or
+// streams without entries) and exactly one record for a push with entries.
+func TestServiceAppendZeroEntriesNoEnqueue(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     *logs.PushRequest
+		records int
+	}{
+		{"no streams", &logs.PushRequest{}, 0},
+		{"streams without entries", &logs.PushRequest{Streams: []logs.Stream{
+			pushReq().Streams[0],
+			{Labels: logs.New(logs.Label{Name: "job", Value: "web"})},
+		}}, 0},
+		{"one entry", pushReq("a"), 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			deps, _ := testDeps(t, t.TempDir())
+			fw := &fakeWAL{}
+			s := newTestService(t, deps, fakeWALOpt(fw))
+			cancel, done := startRun(t, s)
+			waitReady(t, s)
+			if err := s.append(t.Context(), tenant.Default, tc.req); err != nil {
+				t.Fatalf("append: %v", err)
+			}
+			got := 0
+			for _, c := range fw.callList() {
+				if c == "enqueue" {
+					got++
+				}
+			}
+			if got != tc.records {
+				t.Fatalf("WAL enqueues = %d, want %d", got, tc.records)
+			}
+			cancel()
+			if err := <-done; err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+		})
 	}
 }
 

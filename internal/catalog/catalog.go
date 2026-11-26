@@ -4,8 +4,9 @@
 //
 // Roles share state only through the catalog and the object store, never
 // in-process, so they can run in separate processes later. The in-memory
-// implementation here is for tests and `-catalog.driver=memory`; SQLite (and
-// later Postgres) implement the same interface and must pass catalogtest.Run.
+// implementation here is for tests and `-catalog.driver=memory`; SQLite (one
+// process) and Postgres (shared by several processes) implement the same
+// interface and must pass catalogtest.Run.
 package catalog
 
 import (
@@ -25,6 +26,11 @@ var (
 	// ErrNotFound is returned when replacing a file that isn't listed or is
 	// already deleted.
 	ErrNotFound = errors.New("catalog: file not found")
+	// ErrSchemaTooNew is returned when opening a SQLite or Postgres catalog
+	// whose schema_migrations ledger records a version newer than the
+	// highest migration this binary embeds: a newer Parkana migrated it.
+	// Nothing is written to such a catalog.
+	ErrSchemaTooNew = errors.New("catalog: schema is newer than this binary supports")
 )
 
 // File is one Parquet data file in the object store.

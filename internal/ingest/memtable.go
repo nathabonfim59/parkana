@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -88,7 +89,18 @@ type Memtable struct {
 	mu      sync.Mutex // guards tenants and closed
 	tenants map[tenant.ID]*tenantBuf
 	closed  bool
+
+	// buffered is the admission estimate of every row not yet released: the
+	// active generations plus every sealed Generation, queued or taken, until
+	// its Release. Read lock-free by Buffered.
+	buffered atomic.Int64
 }
+
+// Buffered returns the admission-size estimate of every row the memtable
+// holds or has handed out without a Release yet: active generations, sealed
+// generations awaiting TakeSealed, and taken generations the caller has not
+// released (a failed publication keeps them). It never blocks.
+func (m *Memtable) Buffered() int64 { return m.buffered.Load() }
 
 // streamBuf holds the Arrow builder state of one stream in the active
 // generation.
@@ -234,11 +246,14 @@ func (m *Memtable) AppendPrepared(ctx context.Context, id tenant.ID, seq uint64,
 	}
 	t.last = seq
 	t.wal += walBytes
+	var added int64
 	for i := range p.streams {
-		t.mem += p.streams[i].bytes
+		added += p.streams[i].bytes
 	}
+	t.mem += added
+	m.buffered.Add(added)
 	if (m.memMax > 0 && t.mem >= m.memMax) || (m.walMax > 0 && t.wal >= m.walMax) {
-		t.sealLocked(id, m.alloc)
+		t.sealLocked(id, m)
 	}
 	return nil
 }
@@ -362,7 +377,7 @@ func (m *Memtable) tenant(id tenant.ID) (*tenantBuf, error) {
 // sealLocked detaches the active generation's builders and queues it as a
 // sealed Generation. Only cheap state moves happen under the tenant lock;
 // sorting and hour partitioning are deferred to Generation.Parts.
-func (t *tenantBuf) sealLocked(id tenant.ID, alloc memory.Allocator) {
+func (t *tenantBuf) sealLocked(id tenant.ID, m *Memtable) {
 	if !t.genStarted {
 		return
 	}
@@ -376,7 +391,8 @@ func (t *tenantBuf) sealLocked(id tenant.ID, alloc memory.Allocator) {
 	}
 	t.sealed = append(t.sealed, &Generation{
 		tenant: id, first: t.first, last: t.last,
-		alloc: alloc, bases: bases,
+		alloc: m.alloc, bases: bases,
+		mem: t.mem, buffered: &m.buffered,
 	})
 	t.streams = make(map[string]*streamBuf)
 	t.genStarted = false
@@ -402,7 +418,7 @@ func (m *Memtable) Seal(ctx context.Context, id tenant.ID) error {
 	if t.closed {
 		return ErrClosed
 	}
-	t.sealLocked(id, m.alloc)
+	t.sealLocked(id, m)
 	return nil
 }
 
@@ -418,7 +434,7 @@ func (m *Memtable) SealAll(ctx context.Context) error {
 	}
 	for id, t := range m.tenants {
 		t.mu.Lock()
-		t.sealLocked(id, m.alloc)
+		t.sealLocked(id, m)
 		t.mu.Unlock()
 	}
 	return nil
@@ -467,6 +483,8 @@ func (m *Memtable) Close() {
 			buf.rb.Release()
 		}
 		t.streams = nil
+		m.buffered.Add(-t.mem)
+		t.mem = 0
 		for _, g := range t.sealed {
 			g.Release()
 		}
@@ -482,6 +500,10 @@ type Generation struct {
 	tenant      tenant.ID
 	first, last uint64
 	alloc       memory.Allocator
+	// mem is the generation's admission estimate; Release subtracts it from
+	// the memtable's buffered total, exactly once.
+	mem      int64
+	buffered *atomic.Int64
 
 	mu       sync.Mutex
 	bases    map[string]arrow.RecordBatch // unsorted records until Parts runs
@@ -642,6 +664,9 @@ func (g *Generation) Release() {
 		return
 	}
 	g.released = true
+	if g.buffered != nil {
+		g.buffered.Add(-g.mem)
+	}
 	releaseParts(g.parts)
 	g.parts = nil
 	for _, rec := range g.bases {

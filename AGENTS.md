@@ -49,7 +49,7 @@ imports it takes a while; later builds are cached.
 | `internal/logs/` | in-memory model: `Labels` (sorted), `Entry`, `Stream`, `PushRequest`, stream naming |
 | `internal/schema/` | Parquet/Arrow column layout: `_ts`, `line`, `labels`, `meta`, promoted labels |
 | `internal/objstore/` | `Store` interface, `FS` impl, key layout (`DataKey`, `SidecarKey`), `objstoretest` suite |
-| `internal/catalog/` | `Catalog` interface (file list), `Memory` + `SQLite` impls, `catalogtest` suite |
+| `internal/catalog/` | `Catalog` interface (file list), `Memory` + `SQLite` + `Postgres` impls, `catalogtest` suite |
 | `internal/wal/`, `internal/ingest/` | ingester: push and OTLP handlers, WAL (sync modes), memtable, local Parquet, bounded parallel flush/upload with memory admission |
 | `internal/storage/` | Parquet writer, reader, merge |
 | `internal/compactor/` | merge small files, retention, delete replaced objects |
@@ -61,6 +61,10 @@ imports it takes a while; later builds are cached.
 | `internal/pipeline/` | ingest and read pipelines: step compiler/executor, catalog-backed registry with hot reload, ingest `TransformFunc`, read `plan.Source` wrapper (decisions 14-15) |
 | `internal/pipelineapi/` | `/api/v1/pipelines` CRUD and dry-run |
 | `grafana/parkana-datasource/` | Grafana SQL datasource plugin, its own Go module + frontend (decision 17) |
+| `api/` | `parkana.yaml`, the OpenAPI 3.1 document of every HTTP route; the source of the generated HTTP reference |
+| `site/` | VitePress site configuration and theme; the pages themselves are the repository's Markdown |
+| `scripts/doc-links.mjs`, `scripts/docs-gen.mjs` | which files are pages and how links resolve, the docs build checks (anchors, dashes, `llms.txt`); the HTTP and Go reference generators |
+| `internal/doccheck/` | test-only package: package comments and doc comments across the module |
 
 Planned packages (PLAN.md §9) go next to these: `views`.
 
@@ -161,6 +165,64 @@ And the usual rules:
   behind the env var it needs, e.g. skip unless `PARKANA_TEST_S3_ENDPOINT` is
   set, and documented in the test's doc comment.
 - Benchmarks use `b.Loop()` and go in `*_bench_test.go`.
+
+## Documentation
+
+The Markdown in the repository is the single source of the documentation
+site (VitePress, `site/`): `docs/` and the Grafana plugin README are read in
+place, and `scripts/doc-links.mjs` decides which files are pages and their
+URLs. A page is `docs/<name>.md` or, for a section with subpages,
+`docs/<name>/index.md`. Write links relative to the file, as GitHub resolves
+them; the site rewrites them. Every page is listed in `docs/public/llms.txt`
+and in the sidebar in `site/.vitepress/config.mts`.
+
+Generated references are never edited by hand:
+
+- The HTTP reference is generated from `api/parkana.yaml` and the Go reference
+  from the doc comments (gomarkdoc), on every build, into the gitignored
+  `docs/api-reference/`. Keep spec descriptions and doc comments current.
+- The flag tables in `docs/configuration.md` and the metrics table in
+  `docs/operations.md` sit between `begin`/`end` markers. Regenerate them with
+  `make docs-flags` and `make docs-metrics`.
+
+```sh
+npm ci
+npm run docs:dev     # generate the references and serve the site
+npm run docs:build   # what CI runs; every check below runs
+make docs-check      # the Go doc tests, then docs:build
+```
+
+The checks, and what they enforce:
+
+- `npm run docs:build`: no dead page or file link, no `#anchor` that is
+  missing on GitHub or on the site, no em or en dash in hand-written prose,
+  `llms.txt` lists exactly the published pages.
+- `make check` (`go test`): the flag and metrics tables match the code
+  (`internal/config`, `cmd/parkana`), every flag, `PARKANA_*` variable and
+  `parkana_*` metric a page names exists, the registered routes and
+  `api/parkana.yaml` agree in both directions (`cmd/parkana`), and every
+  package has exactly one package comment and every exported identifier a doc
+  comment that starts with its name (`internal/doccheck`).
+
+So a new route goes into `api/parkana.yaml`, a new flag into `flagGroups` in
+`internal/config/docref_test.go` and then `make docs-flags`, a new metric
+through `make docs-metrics`, a new page into `llms.txt` and the sidebar.
+`docs/development/index.md` has the full recipes.
+
+Style for every page:
+
+- Plain words, whole sentences, active voice, sentence-case headings. No
+  filler or marketing; facts and numbers.
+- No em dashes or en dashes; use a colon, a comma, parentheses or two
+  sentences.
+- No inline-header bullets (a bold label, a colon, then the text); write the
+  sentence, or use a table.
+- Examples use placeholders and documentation addresses (`203.0.113.0/24`,
+  `example.com`), never real hosts. DSN examples never hold a real password.
+- State the release honestly: name the latest release in `CHANGELOG.md`, and
+  mark anything listed there under "Unreleased" as unreleased.
+- Changing a heading changes its anchor: search the repository for links to
+  it and update them.
 
 ## Dependencies
 

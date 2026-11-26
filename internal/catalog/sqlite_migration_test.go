@@ -3,8 +3,10 @@ package catalog
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,4 +224,97 @@ func TestPipelineCounterExhaustion(t *testing.T) {
 			t.Fatalf("after delete token overflow: version %d token %d deleted %v", version, token, deleted)
 		}
 	})
+}
+
+// sqliteLedger returns the schema_migrations rows of the database at path as
+// "version name applied_at" strings, ordered by version, read with a plain
+// connection so the catalog under test is not involved.
+func sqliteLedger(t *testing.T, path string) []string {
+	t.Helper()
+	db, err := sql.Open(sqliteDriver, sqliteDSN(path, "busy_timeout(10000)"))
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer db.Close()
+	rows, err := db.QueryContext(t.Context(),
+		`SELECT "version", "name", "applied_at" FROM schema_migrations ORDER BY "version"`)
+	if err != nil {
+		t.Fatalf("read ledger: %v", err)
+	}
+	defer rows.Close()
+	var ledger []string
+	for rows.Next() {
+		var version, appliedAt int64
+		var name string
+		if err := rows.Scan(&version, &name, &appliedAt); err != nil {
+			t.Fatalf("scan ledger: %v", err)
+		}
+		ledger = append(ledger, fmt.Sprintf("%d %s %d", version, name, appliedAt))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read ledger: %v", err)
+	}
+	return ledger
+}
+
+// TestSQLiteRefusesNewerSchema opens a catalog whose ledger records a
+// migration newer than any this binary embeds, as a newer Parkana would leave
+// it: NewSQLite fails with ErrSchemaTooNew, names both versions and writes
+// nothing. A catalog at exactly the embedded version opens.
+func TestSQLiteRefusesNewerSchema(t *testing.T) {
+	migrations, err := loadMigrations()
+	if err != nil {
+		t.Fatalf("loadMigrations: %v", err)
+	}
+	latest := migrations[len(migrations)-1].version
+
+	path := filepath.Join(t.TempDir(), "catalog.db")
+	c, err := NewSQLite(path)
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	// Equal version: reopening a fully migrated catalog works.
+	c, err = NewSQLite(path)
+	if err != nil {
+		t.Fatalf("NewSQLite at version %d: %v", latest, err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	db, err := sql.Open(sqliteDriver, sqliteDSN(path, "busy_timeout(10000)"))
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	newer := latest + 1
+	if _, err := db.ExecContext(t.Context(),
+		`INSERT INTO schema_migrations ("version", "name", "applied_at") VALUES (?, ?, ?)`,
+		newer, fmt.Sprintf("%04d_from_the_future.sql", newer), time.Now().UnixMicro()); err != nil {
+		db.Close()
+		t.Fatalf("record future migration: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	before := sqliteLedger(t, path)
+
+	c, err = NewSQLite(path)
+	if err == nil {
+		c.Close()
+		t.Fatalf("NewSQLite at version %d succeeded, want ErrSchemaTooNew", newer)
+	}
+	if !errors.Is(err, ErrSchemaTooNew) {
+		t.Fatalf("NewSQLite = %v, want ErrSchemaTooNew", err)
+	}
+	want := fmt.Sprintf("catalog: sqlite: schema version %d is newer than this binary supports (%d)", newer, latest)
+	if msg := err.Error(); !strings.HasPrefix(msg, want) {
+		t.Fatalf("error = %q, want prefix %q", msg, want)
+	}
+	if after := sqliteLedger(t, path); !slices.Equal(after, before) {
+		t.Fatalf("ledger after refused open = %v, want unchanged %v", after, before)
+	}
 }

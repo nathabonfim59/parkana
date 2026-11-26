@@ -6,7 +6,9 @@
 #
 # Usage:
 #   scripts/build-frontend.sh           # npm ci + production build into dist/
-#   scripts/build-frontend.sh --check   # additionally run typecheck and unit tests
+#   scripts/build-frontend.sh --check   # additionally run typecheck, unit tests and lint
+#
+# CONTAINER picks the container CLI (default docker; podman works too).
 #
 set -eu
 
@@ -18,13 +20,19 @@ plugin_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
 container_cmd='npm ci --ignore-scripts'
 if [ "${1-}" = '--check' ]; then
-  container_cmd="$container_cmd && npm run typecheck && npm run test:ci"
+  container_cmd="$container_cmd && npm run typecheck && npm run test:ci && npm run lint"
 fi
 container_cmd="$container_cmd && npm run build"
 
 # Run as the invoking user so dist/ and node_modules/ are not root-owned on
 # the host, and keep the npm cache out of the mounted plugin directory.
-docker run --rm \
+container=${CONTAINER:-docker}
+userns=
+if [ "$(basename -- "$container")" = podman ]; then
+  # Rootless podman maps the invoking user only with keep-id.
+  userns=--userns=keep-id
+fi
+"$container" run --rm $userns \
   --user "$(id -u):$(id -g)" \
   --env HOME=/tmp \
   --volume "$plugin_dir":/plugin \

@@ -28,6 +28,7 @@
 // sort and sort_desc order the instant vector by value. Loki skips the usual
 // label sort for any expression containing them (evaluator.go Sortable), so
 // evalVectorAgg reapplies that order after the shared finishMetric shaping.
+
 package logql
 
 import (

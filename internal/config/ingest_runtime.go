@@ -47,7 +47,18 @@ type IngestRuntime struct {
 	// from the container and GOMEMLIMIT memory limits; a positive value
 	// fixes the budget.
 	UploadMemory ByteSize
+	// MaxUnuploaded bounds the local Parquet bytes waiting for upload, summed
+	// over every tenant; past it pushes answer 429. Zero (the default)
+	// selects DefaultMaxUnuploadedFactor x UploadMergeMax; an explicit value
+	// must be at least UploadMergeMax, so one full merge always fits.
+	MaxUnuploaded ByteSize
 }
+
+// DefaultMaxUnuploadedFactor is the multiple of -ingest.upload-merge-max that
+// -ingest.max-unuploaded=0 selects: 16 GiB at the defaults. A healthy
+// ingester keeps about one -ingest.upload-min per stream and hour plus one
+// merge temp locally, far below it.
+const DefaultMaxUnuploadedFactor = 8
 
 // registerRuntime sets the runtime defaults and registers their flags. It
 // runs after Ingest.register initializes the struct, so the defaults survive
@@ -58,6 +69,8 @@ func (c *Ingest) registerRuntime(fs *flag.FlagSet) {
 	c.FlushConcurrency = 4
 	c.UploadConcurrency = 4
 	c.UploadMemory = 0 // automatic budget
+	// DefaultMaxUnuploadedFactor x UploadMergeMax
+	c.MaxUnuploaded = 0
 	fs.Var(walSyncFlag{&c.WALSync}, "wal.sync",
 		"WAL durability mode: 'always' fsyncs every write before ack; 'interval' acks after the write and fsyncs on -wal.sync-interval")
 	fs.Var(positiveDurationFlag{&c.WALSyncInterval}, "wal.sync-interval",
@@ -68,6 +81,20 @@ func (c *Ingest) registerRuntime(fs *flag.FlagSet) {
 		"how many independent upload receipts may upload in parallel")
 	fs.Var(uploadMemoryFlag{&c.UploadMemory}, "ingest.upload-memory",
 		"memory budget for the upload pipeline; 0 derives an automatic budget from the container and GOMEMLIMIT limits")
+	fs.Var(uploadMemoryFlag{&c.MaxUnuploaded}, "ingest.max-unuploaded",
+		"local Parquet bytes waiting for upload, summed over tenants, above which pushes answer 429; 0 is 8 x -ingest.upload-merge-max, an explicit value must be at least -ingest.upload-merge-max")
+}
+
+// MaxUnuploadedBytes resolves MaxUnuploaded: an explicit value as is, zero as
+// DefaultMaxUnuploadedFactor x UploadMergeMax, saturating at math.MaxInt64.
+func (c Ingest) MaxUnuploadedBytes() int64 {
+	if c.MaxUnuploaded > 0 {
+		return int64(c.MaxUnuploaded)
+	}
+	if c.UploadMergeMax > math.MaxInt64/DefaultMaxUnuploadedFactor {
+		return math.MaxInt64
+	}
+	return int64(c.UploadMergeMax) * DefaultMaxUnuploadedFactor
 }
 
 // validateRuntime checks fields a hand-built Config could hold. A zero
@@ -96,6 +123,13 @@ func (c Ingest) validateRuntime() []error {
 	}
 	if c.UploadMemory < 0 {
 		errs = append(errs, fmt.Errorf("-ingest.upload-memory must not be negative"))
+	}
+	switch {
+	case c.MaxUnuploaded < 0:
+		errs = append(errs, fmt.Errorf("-ingest.max-unuploaded must not be negative"))
+	case c.MaxUnuploaded > 0 && c.MaxUnuploaded < c.UploadMergeMax:
+		errs = append(errs, fmt.Errorf("-ingest.max-unuploaded (%s) must be at least -ingest.upload-merge-max (%s), or 0 for the default",
+			&c.MaxUnuploaded, &c.UploadMergeMax))
 	}
 	return errs
 }
@@ -174,8 +208,8 @@ func (f workerCountFlag) Set(s string) error {
 	return nil
 }
 
-// uploadMemoryFlag backs -ingest.upload-memory, where 0 means the
-// automatic budget. It parses like ByteSize.Set but rejects products
+// uploadMemoryFlag backs -ingest.upload-memory and -ingest.max-unuploaded,
+// where 0 means the automatic value. It parses like ByteSize.Set but rejects products
 // that would overflow int64; Set would silently wrap, so "16777216TiB"
 // would wrap to 0 and read as "automatic".
 type uploadMemoryFlag struct{ b *ByteSize }

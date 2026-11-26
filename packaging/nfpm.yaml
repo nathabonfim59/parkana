@@ -47,10 +47,16 @@ contents:
   - src: LICENSE
     dst: /usr/share/doc/parkana/LICENSE
 
+# Each script branches on its arguments: deb passes words (install, configure
+# <old-version>, upgrade, remove, purge), rpm the number of installed
+# versions. An upgrade keeps the service enabled or disabled as it was and
+# restarts it if it was running; packaging/test/maintainer-scripts.sh
+# (make packaging-test) runs every install, upgrade and remove sequence.
 scripts:
   preinstall: packaging/scripts/preinstall.sh
   postinstall: packaging/scripts/postinstall.sh
   preremove: packaging/scripts/preremove.sh
+  postremove: packaging/scripts/postremove.sh
 
 overrides:
   deb:
@@ -63,3 +69,9 @@ overrides:
       - glibc >= 2.34
       - libgcc
       - shadow-utils
+
+rpm:
+  scripts:
+    # rpm runs the old package's %preun after the new %pre and %post; this
+    # restores the service state preinstall.sh recorded (upgrades from 1.0.0).
+    posttrans: packaging/scripts/posttrans.sh

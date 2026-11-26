@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -104,5 +105,21 @@ func TestReadyCheck(t *testing.T) {
 	srv.AddReadyCheck("wal", func(context.Context) error { return io.ErrUnexpectedEOF })
 	if code, body := get(t, base+"/ready", nil); code != http.StatusServiceUnavailable || !strings.Contains(body, "wal") {
 		t.Fatalf("/ready = %d %q, want 503 naming the check", code, body)
+	}
+}
+
+func TestPatterns(t *testing.T) {
+	srv := server.New(server.Options{Logger: slog.New(slog.DiscardHandler), Registry: prometheus.NewRegistry()})
+	srv.Handle("POST /b", http.NotFoundHandler())
+	srv.Handle("GET /a/{name}", http.NotFoundHandler())
+	got := srv.Patterns()
+	want := []string{"GET /a/{name}", "GET /metrics", "GET /ready", "POST /b"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("Patterns() = %q, want %q", got, want)
+	}
+	// The result is a copy: changing it must not change what the server reports.
+	got[0] = "changed"
+	if again := srv.Patterns(); !slices.Equal(again, want) {
+		t.Fatalf("Patterns() after mutating a result = %q, want %q", again, want)
 	}
 }

@@ -30,9 +30,12 @@
 // Deleting objects is the cleanup pass's job: each cycle also runs retention
 // marking, delete-delay purge and orphan GC, which do remove objects.
 //
-// Orphan GC only reclaims an object once it is older than one hour
-// (cleanupOrphanGrace). That grace period is a cross-part contract: an
-// uploader must never AddFiles an object whose Put is older than 30 minutes,
-// so a successful upload cannot be mistaken for an orphan before its catalog
-// row becomes visible.
+// Orphan GC only reclaims an object once it is older than the configured
+// grace (config.Compactor.OrphanGrace, at least config.MinOrphanGrace, one
+// hour). That grace period is a cross-part contract: an uploader must never
+// AddFiles an object whose Put is older than 30 minutes, so a successful
+// upload cannot be mistaken for an orphan before its catalog row becomes
+// visible. Orphan GC never runs with the memory catalog driver, and a safety
+// stop skips a sweep whose candidates are too large a share of the listed
+// objects (see cleanupOrphans).
 package compactor

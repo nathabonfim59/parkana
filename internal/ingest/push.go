@@ -13,6 +13,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"strconv"
 
 	"github.com/golang/snappy"
 
@@ -37,7 +38,8 @@ var ErrUnavailable = errors.New("ingest: not accepting pushes")
 // acknowledgment point: WAL fsync plus memtable admission in always mode, or
 // WAL write plus memtable admission in interval mode. Durable publication
 // still waits for fsync. The handler answers 204 only on a nil return. Wrap
-// ErrUnavailable for a 503; any other error maps to 500.
+// ErrUnavailable for a 503 and ErrBackpressure for a 429 (a *BackpressureError
+// also sets Retry-After); any other error maps to 500.
 type AppendFunc func(ctx context.Context, id tenant.ID, req *logs.PushRequest) error
 
 // ErrRejected marks a TransformFunc error caused by the pushed data; the
@@ -70,7 +72,9 @@ type PushOptions struct {
 // NewPushHandler returns a handler for lokiapi.Push. It decodes protobuf
 // (snappy block format) and JSON bodies, optionally gzip-compressed,
 // validates the whole request, calls Append and answers 204 only after it
-// returns successfully.
+// returns successfully. As in Loki, a request without streams answers 422 and
+// one whose streams have no entries answers 204; neither reaches Transform or
+// Append.
 func NewPushHandler(o PushOptions) (http.Handler, error) {
 	if o.Append == nil {
 		return nil, errors.New("ingest: PushOptions.Append is required")
@@ -93,6 +97,17 @@ func (h *pushHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.validate(req); err != nil {
 		lokiapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Like Loki's distributor, a push without streams is a client error and
+	// one whose streams carry no entries is accepted with nothing stored.
+	// Labels of entry-less streams were validated above, as Loki parses them.
+	switch {
+	case len(req.Streams) == 0:
+		lokiapi.Error(w, http.StatusUnprocessableEntity, missingStreamsMsg)
+		return
+	case req.Entries() == 0:
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	ctx := r.Context()
@@ -121,14 +136,27 @@ func (h *pushHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			return // the client is gone; nothing to answer
 		}
-		if errors.Is(err, ErrUnavailable) {
-			lokiapi.Error(w, http.StatusServiceUnavailable, err.Error())
-			return
-		}
-		lokiapi.Error(w, http.StatusInternalServerError, "ingest: failed to persist push")
+		writeAppendError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// writeAppendError answers a failed Append, for the Loki and the OTLP route
+// alike: 429 with Retry-After for back-pressure, 503 while the ingester is not
+// accepting, 500 for anything else. The bodies are Loki-style plain text.
+func writeAppendError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrBackpressure):
+		if be, ok := errors.AsType[*BackpressureError](err); ok {
+			w.Header().Set("Retry-After", strconv.FormatInt(retryAfterSeconds(be.RetryAfter), 10))
+		}
+		lokiapi.Error(w, http.StatusTooManyRequests, err.Error())
+	case errors.Is(err, ErrUnavailable):
+		lokiapi.Error(w, http.StatusServiceUnavailable, err.Error())
+	default:
+		lokiapi.Error(w, http.StatusInternalServerError, "ingest: failed to persist push")
+	}
 }
 
 // decode reads the bounded body, expands gzip, and decodes per Content-Type,
@@ -181,6 +209,10 @@ func (h *pushHandler) decode(r *http.Request) (*logs.PushRequest, error) {
 }
 
 var errTooLarge = errors.New("ingest: request body exceeds the limit")
+
+// missingStreamsMsg is the 422 body for a push without streams, Loki's
+// validation.MissingStreamsErrorMsg verbatim (pkg/validation/validate.go).
+const missingStreamsMsg = "error at least one valid stream is required for ingestion"
 
 // readBounded reads all of r and fails once the data exceeds max bytes.
 func readBounded(r io.Reader, max int64) ([]byte, error) {

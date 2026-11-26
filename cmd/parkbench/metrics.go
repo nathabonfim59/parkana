@@ -10,6 +10,7 @@
 // unavailable (null), never zero, and invalidates the sample: reporting zero
 // would silently claim that no file was scanned or pruned. Optional cache
 // diagnostics are reported as null when absent.
+
 package main
 
 import (

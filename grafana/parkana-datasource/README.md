@@ -34,14 +34,28 @@ Result formats:
 The optional **row limit** caps returned rows; when empty the server default
 applies and results beyond the cap are marked truncated.
 
+## Installing
+
+Releases from Parkana 1.2.0 (unreleased) on carry this plugin as
+`parkana-sql-datasource-<version>.zip`. Install it with
+`grafana cli --pluginUrl <zip> plugins install parkana-sql-datasource`, or
+unzip it into Grafana's plugins directory. The plugin is unsigned: list
+`parkana-sql-datasource` in `GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS`.
+Requires Grafana 13.3.0 or newer.
+
 ## Building
 
-The frontend is built in a pinned Node container (no host Node required):
+From the repository root, `make plugin-dist VERSION=v1.2.0` builds the
+release zip: the frontend in a pinned Node container (no host Node
+required), the backend for linux/amd64, linux/arm64, darwin/amd64,
+darwin/arm64 and windows/amd64, into
+`dist/parkana-sql-datasource-1.2.0.zip`.
+
+To build the parts separately in this directory:
 
 ```sh
 scripts/build-frontend.sh           # production build into dist/
-scripts/build-frontend.sh --check   # also run typecheck and unit tests
+scripts/build-frontend.sh --check   # also run typecheck, unit tests and lint
+make backend                        # dist/gpx_parkana_sql_datasource_<goos>_<goarch>
+make check                          # backend go vet and go test
 ```
-
-The plugin backend binary (`gpx_parkana_sql_datasource`) is built separately
-from the Go module in this directory.

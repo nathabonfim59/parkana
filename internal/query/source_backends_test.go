@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/nathabonfim59/parkana/internal/catalog"
+	"github.com/nathabonfim59/parkana/internal/catalog/catalogtest"
 	"github.com/nathabonfim59/parkana/internal/logs"
 	"github.com/nathabonfim59/parkana/internal/objstore"
 	"github.com/nathabonfim59/parkana/internal/plan"
@@ -45,9 +46,77 @@ func (k backendKind) String() string {
 	return fmt.Sprintf("backendKind(%d)", int(k))
 }
 
+// catalogKind is the catalog backend under a backendEnv.
+type catalogKind int
+
+const (
+	catalogSQLite catalogKind = iota
+	catalogPostgres
+)
+
+func (k catalogKind) String() string {
+	switch k {
+	case catalogSQLite:
+		return "sqlite"
+	case catalogPostgres:
+		return "postgres"
+	}
+	return fmt.Sprintf("catalogKind(%d)", int(k))
+}
+
+// backendCase is one object store and catalog combination of the backend
+// matrix.
+type backendCase struct {
+	store backendKind
+	cat   catalogKind
+}
+
+// String names the subtest: the store alone for SQLite, as before the
+// catalog dimension existed, and store/catalog otherwise.
+func (c backendCase) String() string {
+	if c.cat == catalogSQLite {
+		return c.store.String()
+	}
+	return c.store.String() + "/" + c.cat.String()
+}
+
+// backendCatalogMatrix is the store × catalog matrix of the conformance and
+// merged-file tests. The Postgres rows skip unless PARKANA_TEST_POSTGRES_DSN
+// is set (see catalogtest.PostgresDSN).
+var backendCatalogMatrix = []backendCase{
+	{backendFS, catalogSQLite},
+	{backendS3, catalogSQLite},
+	{backendFS, catalogPostgres},
+	{backendS3, catalogPostgres},
+}
+
+// openBackendCatalog opens a fresh, empty catalog of kind, closed when t ends.
+func openBackendCatalog(t *testing.T, kind catalogKind) catalog.Catalog {
+	t.Helper()
+	var cat catalog.Catalog
+	switch kind {
+	case catalogSQLite:
+		c, err := catalog.NewSQLite(filepath.Join(t.TempDir(), "catalog.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cat = c
+	case catalogPostgres:
+		c, err := catalog.NewPostgres(t.Context(), catalogtest.PostgresDSN(t))
+		if err != nil {
+			t.Fatalf("NewPostgres: %v", err)
+		}
+		cat = c
+	default:
+		t.Fatalf("unknown catalog %d", kind)
+	}
+	t.Cleanup(func() { cat.Close() })
+	return cat
+}
+
 // backendEnv is a real backend combination for the conformance and retry
 // tests: an object store, the real object cache as the Source's resolver, a
-// SQLite catalog and DuckDB. No resolver fake stands in for the cache, and
+// SQLite or Postgres catalog and DuckDB. No resolver fake stands in for the cache, and
 // the Source runs the production pruning path: a real decoded sidecar cache
 // and scan metrics on their own registry, so the needle fixtures of the
 // conformance suite exercise sidecar pruning, not just full scans.
@@ -70,16 +139,20 @@ type backendEnv struct {
 // and a SQLite catalog, with scan metrics on env.scanReg.
 func newBackendEnv(t *testing.T, kind backendKind, files []plantest.File) *backendEnv {
 	t.Helper()
+	return newBackendEnvCatalog(t, backendCase{kind, catalogSQLite}, files)
+}
+
+// newBackendEnvCatalog is newBackendEnv over bc's object store and catalog.
+func newBackendEnvCatalog(t *testing.T, bc backendCase, files []plantest.File) *backendEnv {
+	t.Helper()
+	kind := bc.store
+	base := openBackendCatalog(t, bc.cat) // first: a Postgres row skips before DuckDB opens
 	db := openTestDB(t)
-	base, err := catalog.NewSQLite(filepath.Join(t.TempDir(), "catalog.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { base.Close() })
 	cat := &hookCatalog{Catalog: base}
 
 	var store objstore.Store
 	var cache *objectCache
+	var err error
 	dir := ""
 	switch kind {
 	case backendFS:
@@ -186,17 +259,18 @@ func newFakeS3(t *testing.T) *objstore.S3 {
 // TestSourceBackends runs the complete frozen conformance suite — Select and
 // Aggregate subtrees included — over both real backends, loaded through
 // plantest.Dataset/Load: FS in place and S3 through the real object cache,
-// each with a SQLite catalog. The Source carries the real decoded sidecar
+// each with a SQLite and a Postgres catalog (the Postgres rows skip unless
+// PARKANA_TEST_POSTGRES_DSN is set). The Source carries the real decoded sidecar
 // cache, so the suite's needle fixtures exercise production index pruning and
 // the label-equality pruning runs on the dataset's complete summaries; the
 // equality with MemSource proves neither ever changes results.
 // TestSourcePrunesBySidecar and TestSourcePrunesByLabels prove the pruning
 // actually fires on this wiring.
 func TestSourceBackends(t *testing.T) {
-	for _, kind := range []backendKind{backendFS, backendS3} {
-		t.Run(kind.String(), func(t *testing.T) {
+	for _, bc := range backendCatalogMatrix {
+		t.Run(bc.String(), func(t *testing.T) {
 			plantest.RunSource(t, func(t *testing.T, files []plantest.File) plan.Source {
-				return newBackendEnv(t, kind, files).src
+				return newBackendEnvCatalog(t, bc, files).src
 			})
 		})
 	}
@@ -240,9 +314,9 @@ func TestSourceBackendMergedMapFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, kind := range []backendKind{backendFS, backendS3} {
-		t.Run(kind.String(), func(t *testing.T) {
-			env := newBackendEnv(t, kind, nil)
+	for _, bc := range backendCatalogMatrix {
+		t.Run(bc.String(), func(t *testing.T) {
+			env := newBackendEnvCatalog(t, bc, nil)
 			key := objstore.DataKey(tenant.Default, "merged", st.MinTS, uuid.NewV7())
 			if err := env.store.Put(t.Context(), key, bytes.NewReader(merged.Bytes()), int64(merged.Len())); err != nil {
 				t.Fatalf("put merged object: %v", err)
@@ -320,9 +394,9 @@ func TestSourceBackendMergedMapFallbackCompleteSummary(t *testing.T) {
 		t.Fatal("merged LabelsComplete = false, want true")
 	}
 
-	for _, kind := range []backendKind{backendFS, backendS3} {
-		t.Run(kind.String(), func(t *testing.T) {
-			env := newBackendEnv(t, kind, nil)
+	for _, bc := range backendCatalogMatrix {
+		t.Run(bc.String(), func(t *testing.T) {
+			env := newBackendEnvCatalog(t, bc, nil)
 			key := objstore.DataKey(tenant.Default, "merged", st.MinTS, uuid.NewV7())
 			if err := env.store.Put(t.Context(), key, bytes.NewReader(merged.Bytes()), int64(merged.Len())); err != nil {
 				t.Fatalf("put merged object: %v", err)

@@ -18,6 +18,7 @@
 // A positive step below 1ms truncates to zero milliseconds. Loki's own splitter
 // then divides by a zero step; Parkana rejects the request explicitly instead
 // of panicking.
+
 package logql
 
 import (

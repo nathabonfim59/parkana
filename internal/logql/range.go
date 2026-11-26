@@ -22,6 +22,7 @@
 // Sub-microsecond steps cannot share a whole-microsecond grid (successive
 // windows advance by floor or ceil of the step), so they use the exact 1µs
 // grid, which is exact but often exceeds the bucket bound and falls back.
+
 package logql
 
 import (

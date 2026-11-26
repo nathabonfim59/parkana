@@ -45,6 +45,7 @@ type Service interface {
 // ServiceFunc adapts a function to Service.
 type ServiceFunc func(ctx context.Context) error
 
+// Run calls f(ctx).
 func (f ServiceFunc) Run(ctx context.Context) error { return f(ctx) }
 
 // Factory builds a role's service from Deps and registers its HTTP routes.
@@ -110,8 +111,9 @@ func OpenStore(cfg config.Config) (objstore.Store, error) {
 	return nil, fmt.Errorf("unknown storage backend %q", cfg.Storage.Backend)
 }
 
-// OpenCatalog opens the configured catalog.
-func OpenCatalog(cfg config.Config) (catalog.Catalog, error) {
+// OpenCatalog opens the configured catalog. ctx bounds connecting to and
+// migrating a Postgres catalog; the returned catalog outlives it.
+func OpenCatalog(ctx context.Context, cfg config.Config) (catalog.Catalog, error) {
 	switch cfg.Catalog.Driver {
 	case "memory":
 		return catalog.NewMemory(), nil
@@ -119,6 +121,14 @@ func OpenCatalog(cfg config.Config) (catalog.Catalog, error) {
 		cat, err := catalog.NewSQLite(cfg.Catalog.DSN)
 		if err != nil {
 			return nil, fmt.Errorf("catalog driver sqlite: %w", err)
+		}
+		return cat, nil
+	case "postgres":
+		// NewPostgres keeps the DSN (and its password) out of its errors;
+		// do not add it here.
+		cat, err := catalog.NewPostgres(ctx, cfg.Catalog.DSN)
+		if err != nil {
+			return nil, fmt.Errorf("catalog driver postgres: %w", err)
 		}
 		return cat, nil
 	}

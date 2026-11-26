@@ -31,6 +31,7 @@ func NewMemory() *Memory {
 	}
 }
 
+// AddFiles implements Catalog.AddFiles.
 func (m *Memory) AddFiles(ctx context.Context, files ...File) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -41,6 +42,7 @@ func (m *Memory) AddFiles(ctx context.Context, files ...File) error {
 	return nil
 }
 
+// ReplaceFiles implements Catalog.ReplaceFiles.
 func (m *Memory) ReplaceFiles(ctx context.Context, t tenant.ID, remove []string, add []File) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -91,6 +93,7 @@ func (m *Memory) insert(files []File) {
 	}
 }
 
+// ListFiles implements Catalog.ListFiles.
 func (m *Memory) ListFiles(ctx context.Context, flt Filter) iter.Seq2[File, error] {
 	return func(yield func(File, error) bool) {
 		m.mu.RLock()
@@ -114,6 +117,7 @@ func (m *Memory) ListFiles(ctx context.Context, flt Filter) iter.Seq2[File, erro
 	}
 }
 
+// Streams implements Catalog.Streams.
 func (m *Memory) Streams(ctx context.Context, t tenant.ID) ([]string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -126,6 +130,7 @@ func (m *Memory) Streams(ctx context.Context, t tenant.ID) ([]string, error) {
 	return slices.Sorted(maps.Keys(set)), nil
 }
 
+// SetSidecar implements Catalog.SetSidecar.
 func (m *Memory) SetSidecar(ctx context.Context, t tenant.ID, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -138,6 +143,7 @@ func (m *Memory) SetSidecar(ctx context.Context, t tenant.ID, key string) error 
 	return nil
 }
 
+// PurgeDeleted implements Catalog.PurgeDeleted.
 func (m *Memory) PurgeDeleted(ctx context.Context, t tenant.ID, cutoff time.Time) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -152,4 +158,5 @@ func (m *Memory) PurgeDeleted(ctx context.Context, t tenant.ID, cutoff time.Time
 	return keys, nil
 }
 
+// Close does nothing: a Memory catalog holds no resources.
 func (m *Memory) Close() error { return nil }

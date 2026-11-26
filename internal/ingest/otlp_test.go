@@ -165,9 +165,8 @@ func TestOTLPEncodings(t *testing.T) {
 }
 
 // TestOTLPEmptyNoAppend: an export request that decodes to no entries is
-// acknowledged with 204 and never reaches Append or the WAL. The push
-// endpoint keeps its frozen behavior for an empty request (Append decides),
-// documenting the deliberate difference between the two endpoints.
+// acknowledged with 204 and never reaches Append or the WAL. TestPushEmpty
+// covers the push endpoint, which skips Append the same way.
 func TestOTLPEmptyNoAppend(t *testing.T) {
 	emptyJSON := otlpJSON(t, plog.NewLogs())
 	resourceJSON := []byte(`{"resourceLogs":[{"resource":{"attributes":[` +
@@ -199,21 +198,6 @@ func TestOTLPEmptyNoAppend(t *testing.T) {
 			}
 		})
 	}
-
-	t.Run("push contrast appends an empty request", func(t *testing.T) {
-		// Frozen push behavior: without a transform the empty request is
-		// handed to Append. Parkana's OTLP endpoint skips it instead.
-		append, calls := recorder(nil)
-		h := newHandler(t, ingest.PushOptions{Append: append})
-		empty := []byte(`{"streams":[{"stream":{"job":"api"},"values":[]}]}`)
-		w := post(t, h, "application/json", "", empty, nil)
-		if w.Code != http.StatusNoContent {
-			t.Fatalf("code = %d, want 204", w.Code)
-		}
-		if len(*calls) != 1 {
-			t.Fatalf("push append called %d times, want 1", len(*calls))
-		}
-	})
 }
 
 // TestOTLPEmptyTransformExactlyOnce: a decoded empty request still reaches

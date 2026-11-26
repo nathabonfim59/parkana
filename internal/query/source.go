@@ -1,5 +1,6 @@
 // The querier's plan.Source: files listed by the catalog, resolved to local
 // paths, read as Parquet through DuckDB with the SQL compiled in sql.go.
+
 package query
 
 import (

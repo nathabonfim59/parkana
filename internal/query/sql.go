@@ -3,6 +3,7 @@
 // The SQL text contains only Parkana's own keywords, constant column names
 // and identifiers taken from the trusted catalog (promoted label names);
 // every client-controlled value is a bound parameter.
+
 package query
 
 import (

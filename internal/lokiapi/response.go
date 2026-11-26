@@ -14,6 +14,7 @@
 //
 // Handlers live in internal/query; this package only turns a plan.Result into
 // bytes, so it stays independent of the executor and easy to test.
+
 package lokiapi
 
 import (

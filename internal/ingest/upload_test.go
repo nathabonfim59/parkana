@@ -1,7 +1,7 @@
 package ingest
 
 // Tests for the uploader. They run against the real LocalStore, filesystem
-// object store and a memory or SQLite catalog, using narrow delegating wrappers
+// object store and a memory, SQLite or Postgres catalog, using narrow delegating wrappers
 // to inject Put and catalog failures. No interface is changed for tests.
 
 import (
@@ -24,6 +24,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/nathabonfim59/parkana/internal/catalog"
+	"github.com/nathabonfim59/parkana/internal/catalog/catalogtest"
 	"github.com/nathabonfim59/parkana/internal/index"
 	"github.com/nathabonfim59/parkana/internal/objstore"
 	"github.com/nathabonfim59/parkana/internal/schema"
@@ -55,13 +56,16 @@ type uploadReadRow struct {
 type uploadCatalogKind string
 
 const (
-	uploadCatalogMemory uploadCatalogKind = "memory"
-	uploadCatalogSQLite uploadCatalogKind = "sqlite"
+	uploadCatalogMemory   uploadCatalogKind = "memory"
+	uploadCatalogSQLite   uploadCatalogKind = "sqlite"
+	uploadCatalogPostgres uploadCatalogKind = "postgres"
 )
 
-// uploadCatalogKinds is the backend table for catalog-sensitive tests.
+// uploadCatalogKinds is the backend table for catalog-sensitive tests. The
+// postgres rows skip unless PARKANA_TEST_POSTGRES_DSN is set (see
+// catalogtest.PostgresDSN).
 func uploadCatalogKinds() []uploadCatalogKind {
-	return []uploadCatalogKind{uploadCatalogMemory, uploadCatalogSQLite}
+	return []uploadCatalogKind{uploadCatalogMemory, uploadCatalogSQLite, uploadCatalogPostgres}
 }
 
 // uploadFixture owns a local store, an object store and a catalog in temporary
@@ -73,7 +77,7 @@ type uploadFixture struct {
 	objects *objstore.FS
 	cat     catalog.Catalog
 	catKind uploadCatalogKind
-	catPath string // SQLite database file, empty for memory
+	catPath string // SQLite database file or Postgres DSN, empty for memory
 	promote func(string) []string
 	seq     map[tenant.ID]uint64
 }
@@ -91,8 +95,8 @@ func uploadNewFixtureWithOps(t *testing.T, mutate func(*localFileOps)) *uploadFi
 }
 
 // uploadNewFixtureKind builds a fixture backed by the given catalog backend.
-// A SQLite catalog lives in its own temp file so reopening it can prove
-// persistence.
+// A SQLite catalog lives in its own temp file and a Postgres catalog in its
+// own schema, so reopening it can prove persistence.
 func uploadNewFixtureKind(t *testing.T, kind uploadCatalogKind, mutate func(*localFileOps)) *uploadFixture {
 	t.Helper()
 	ctx := t.Context()
@@ -134,7 +138,7 @@ func uploadNewFixtureKind(t *testing.T, kind uploadCatalogKind, mutate func(*loc
 }
 
 // uploadNewCatalog opens one catalog backend, returning the instance and, for
-// SQLite, the database path needed to reopen it.
+// SQLite and Postgres, the database path or DSN needed to reopen it.
 func uploadNewCatalog(t *testing.T, kind uploadCatalogKind) (catalog.Catalog, string) {
 	t.Helper()
 	switch kind {
@@ -142,21 +146,44 @@ func uploadNewCatalog(t *testing.T, kind uploadCatalogKind) (catalog.Catalog, st
 		return catalog.NewMemory(), ""
 	case uploadCatalogSQLite:
 		path := filepath.Join(t.TempDir(), "catalog.sqlite")
-		cat, err := catalog.NewSQLite(path)
-		if err != nil {
-			t.Fatalf("catalog.NewSQLite: %v", err)
-		}
-		return cat, path
+		return uploadOpenCatalog(t, kind, path), path
+	case uploadCatalogPostgres:
+		dsn := catalogtest.PostgresDSN(t)
+		return uploadOpenCatalog(t, kind, dsn), dsn
 	default:
 		t.Fatalf("unknown catalog kind %q", kind)
 		return nil, ""
 	}
 }
 
+// uploadOpenCatalog opens the persistent catalog of kind at source, a SQLite
+// database path or a Postgres DSN.
+func uploadOpenCatalog(t *testing.T, kind uploadCatalogKind, source string) catalog.Catalog {
+	t.Helper()
+	switch kind {
+	case uploadCatalogSQLite:
+		cat, err := catalog.NewSQLite(source)
+		if err != nil {
+			t.Fatalf("catalog.NewSQLite: %v", err)
+		}
+		return cat
+	case uploadCatalogPostgres:
+		cat, err := catalog.NewPostgres(t.Context(), source)
+		if err != nil {
+			t.Fatalf("catalog.NewPostgres: %v", err)
+		}
+		return cat
+	default:
+		t.Fatalf("catalog kind %q cannot be reopened", kind)
+		return nil
+	}
+}
+
 // reopen closes and reopens the local store on the same directory, exercising
 // crash recovery, and reopens the catalog the same way. The memory catalog
-// stays live; a SQLite catalog is reopened on the same database file, so the
-// reader must recover from real persisted rows.
+// stays live; a SQLite catalog is reopened on the same database file and a
+// Postgres catalog on the same schema, so the reader must recover from real
+// persisted rows.
 func (f *uploadFixture) reopen() {
 	f.t.Helper()
 	if err := f.local.Close(); err != nil {
@@ -167,17 +194,13 @@ func (f *uploadFixture) reopen() {
 		f.t.Fatalf("reopen local: %v", err)
 	}
 	f.local = local
-	if f.catKind != uploadCatalogSQLite {
+	if f.catKind == uploadCatalogMemory {
 		return
 	}
 	if err := f.cat.Close(); err != nil {
 		f.t.Fatalf("close catalog: %v", err)
 	}
-	cat, err := catalog.NewSQLite(f.catPath)
-	if err != nil {
-		f.t.Fatalf("reopen catalog: %v", err)
-	}
-	f.cat = cat
+	f.cat = uploadOpenCatalog(f.t, f.catKind, f.catPath)
 }
 
 // tenantStore returns (creating on first use) one tenant's local state.

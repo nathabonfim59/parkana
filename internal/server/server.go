@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -86,6 +88,14 @@ func (s *Server) Registered(pattern string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.patterns[pattern]
+}
+
+// Patterns returns every pattern registered with Handle, sorted, including
+// the /ready and /metrics routes New registers. The slice is a copy.
+func (s *Server) Patterns() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Sorted(maps.Keys(s.patterns))
 }
 
 // AddReadyCheck adds a check that /ready runs; /ready returns 503 while any

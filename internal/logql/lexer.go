@@ -31,6 +31,7 @@ type Position struct {
 	Col    int
 }
 
+// String renders line:col.
 func (p Position) String() string {
 	return strconv.Itoa(p.Line) + ":" + strconv.Itoa(p.Col)
 }

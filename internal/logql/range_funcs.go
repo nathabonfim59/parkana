@@ -17,6 +17,7 @@
 // ascending timestamp, and rate over unwrapped values as sum/range-seconds.
 // Empty windows produce no point; absent_over_time is the exception, emitting
 // 1 for every window with no surviving sample.
+
 package logql
 
 import (

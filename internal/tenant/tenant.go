@@ -23,6 +23,9 @@ const Header = "X-Scope-OrgID"
 
 const maxLen = 64
 
+// Errors from Validate and Resolve: ErrInvalid for a malformed id,
+// ErrNotPermitted for a tenant other than Default while multi-tenancy is
+// off.
 var (
 	ErrInvalid      = errors.New("tenant: invalid id")
 	ErrNotPermitted = errors.New("tenant: multi-tenancy is disabled; only the default tenant is accepted")

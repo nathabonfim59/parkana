@@ -86,11 +86,7 @@ func (h *otlpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if ctx.Err() != nil {
 			return // the client is gone; nothing to answer
 		}
-		if errors.Is(err, ErrUnavailable) {
-			lokiapi.Error(w, http.StatusServiceUnavailable, err.Error())
-			return
-		}
-		lokiapi.Error(w, http.StatusInternalServerError, "ingest: failed to persist push")
+		writeAppendError(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

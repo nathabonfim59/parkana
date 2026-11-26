@@ -8,6 +8,7 @@
 // or-group is an AND of negations and does go down. A Source limit is pushed
 // only when every selected row is emitted unchanged: a pre-limit in front of a
 // filter, pipeline or interval would underfill the result.
+
 package logql
 
 import (

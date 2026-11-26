@@ -21,6 +21,7 @@ import (
 
 	"github.com/nathabonfim59/parkana/internal/app"
 	"github.com/nathabonfim59/parkana/internal/catalog"
+	"github.com/nathabonfim59/parkana/internal/catalog/catalogtest"
 	"github.com/nathabonfim59/parkana/internal/config"
 	"github.com/nathabonfim59/parkana/internal/lokiapi"
 	"github.com/nathabonfim59/parkana/internal/objstore"
@@ -119,13 +120,25 @@ type liveRun struct {
 // startup failure still stops and joins the process.
 func startLive(t *testing.T, args ...string) *liveRun {
 	t.Helper()
+	return startLiveEnv(t, nil, args...)
+}
+
+// startLiveEnv is startLive with env as the process environment, for values
+// that must not appear on the command line (a DSN with a password).
+func startLiveEnv(t *testing.T, env map[string]string, args ...string) *liveRun {
+	t.Helper()
+	// Create the data dir before registering the stop: cleanups run last in,
+	// first out, so the process stops (final flush included) before its data
+	// dir, and any dir or schema the caller made earlier, is removed.
+	dataDir := t.TempDir()
 	ctx, cancel := context.WithCancel(t.Context())
 	logs := &syncLog{}
 	done := make(chan error, 1)
 	lr := &liveRun{logs: logs, cancel: cancel, done: done}
 	t.Cleanup(func() { lr.stop(t) })
-	full := append([]string{"-http.addr=127.0.0.1:0", "-data.dir=" + t.TempDir()}, args...)
-	go func() { done <- run(ctx, full, func(string) string { return "" }, logs) }()
+	full := append([]string{"-http.addr=127.0.0.1:0", "-data.dir=" + dataDir}, args...)
+	getenv := func(key string) string { return env[key] }
+	go func() { done <- run(ctx, full, getenv, logs) }()
 	line := logs.waitFor(t, "http server listening", 30*time.Second)
 	addr, ok := strings.CutPrefix(line[strings.Index(line, "http server listening"):], "http server listening")
 	if !ok {
@@ -322,6 +335,17 @@ func pushLine(t *testing.T, lr *liveRun, stream map[string]string, ts time.Time,
 	if code != http.StatusNoContent {
 		t.Fatalf("push: %d\n%s", code, resp)
 	}
+}
+
+// TestStartLiveStopsBeforeRemovingDataDir regresses startLive's cleanup
+// order: the process must stop, final flush included, before its data dir is
+// removed. The pushed line is still in the memtable when the test ends, so
+// the final flush writes under the data dir; with the wrong order it fails
+// and lr.stop reports the run error.
+func TestStartLiveStopsBeforeRemovingDataDir(t *testing.T) {
+	lr := startLive(t, "-roles=ingester", "-ingest.flush-interval=1h", "-ingest.upload-interval=1h")
+	pushLine(t, lr, map[string]string{"service_name": "checkout"},
+		time.Now().Add(-time.Minute).Truncate(time.Microsecond), "pending final flush")
 }
 
 func waitFor(t *testing.T, timeout time.Duration, what string, f func() bool) {
@@ -607,26 +631,54 @@ func TestPipelineEndToEnd(t *testing.T) {
 
 // TestPipelineConvergesAcrossIndependentCatalogs writes pipelines through a
 // second catalog connection while the process runs, proving the roles reload
-// independently through the catalog and that a delete becomes visible.
+// independently through the catalog and that a delete becomes visible. The
+// postgres subtest skips unless PARKANA_TEST_POSTGRES_DSN is set; its DSN
+// reaches the process only through PARKANA_CATALOG_DSN.
 func TestPipelineConvergesAcrossIndependentCatalogs(t *testing.T) {
-	dir := t.TempDir()
-	dsn := dir + "/catalog.db"
-	lr := startLive(t,
-		"-roles=all",
-		"-catalog.dsn="+dsn,
-		"-pipeline.poll-interval=50ms",
-		"-pipeline.reload-timeout=2s",
-		"-ingest.flush-interval=20ms",
-		"-ingest.upload-interval=20ms",
-		"-ingest.upload-max-age=1ms",
-		"-ingest.upload-min=1B",
-	)
-	second, err := catalog.NewSQLite(dsn)
-	if err != nil {
-		t.Fatal(err)
+	for _, tc := range []struct {
+		name  string
+		start func(t *testing.T, args ...string) (*liveRun, catalog.Catalog)
+	}{
+		{"sqlite", func(t *testing.T, args ...string) (*liveRun, catalog.Catalog) {
+			dsn := t.TempDir() + "/catalog.db"
+			lr := startLive(t, append(args, "-catalog.dsn="+dsn)...)
+			second, err := catalog.NewSQLite(dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return lr, second
+		}},
+		{"postgres", func(t *testing.T, args ...string) (*liveRun, catalog.Catalog) {
+			dsn := catalogtest.PostgresDSN(t)
+			lr := startLiveEnv(t, map[string]string{"PARKANA_CATALOG_DSN": dsn},
+				append(args, "-catalog.driver=postgres")...)
+			second, err := catalog.NewPostgres(t.Context(), dsn)
+			if err != nil {
+				t.Fatalf("NewPostgres: %v", err)
+			}
+			return lr, second
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lr, second := tc.start(t,
+				"-roles=all",
+				"-pipeline.poll-interval=50ms",
+				"-pipeline.reload-timeout=2s",
+				"-ingest.flush-interval=20ms",
+				"-ingest.upload-interval=20ms",
+				"-ingest.upload-max-age=1ms",
+				"-ingest.upload-min=1B",
+			)
+			t.Cleanup(func() { _ = second.Close() })
+			pipelineConvergesAcrossIndependentCatalogs(t, lr, second)
+		})
 	}
-	t.Cleanup(func() { _ = second.Close() })
+}
 
+// pipelineConvergesAcrossIndependentCatalogs is the body of
+// TestPipelineConvergesAcrossIndependentCatalogs for one running process lr
+// and an independent handle second on its catalog.
+func pipelineConvergesAcrossIndependentCatalogs(t *testing.T, lr *liveRun, second catalog.Catalog) {
 	ts := time.Now().Add(-time.Minute).Truncate(time.Microsecond)
 	line := "value=hello"
 	pushLine(t, lr, map[string]string{"service_name": "checkout"}, ts, line)
@@ -844,19 +896,110 @@ func TestCombineWithRegistryKeepsRealError(t *testing.T) {
 }
 
 // TestRunRejectsBadCatalogConfig covers a startup catalog failure before any
-// role is built.
+// role is built. A Postgres DSN goes through PARKANA_CATALOG_DSN, as the
+// docs advise for one holding a password, and must fail fast without
+// showing the DSN or its password. The missing-schema row needs a server and
+// skips unless PARKANA_TEST_POSTGRES_DSN is set; the refused-connection row
+// needs none.
 func TestRunRejectsBadCatalogConfig(t *testing.T) {
-	dir := t.TempDir()
-	var stderr bytes.Buffer
-	err := run(t.Context(), []string{
-		"-http.addr=127.0.0.1:0",
-		"-data.dir=" + dir,
-		"-catalog.driver=sqlite",
-		"-catalog.dsn=" + dir, // a directory is not a database file
-	}, func(string) string { return "" }, &stderr)
-	if err == nil {
-		t.Fatal("run accepted a directory as the catalog DSN")
+	for _, tc := range []struct {
+		name    string
+		args    func(t *testing.T, dir string) (args []string, dsnEnv string)
+		wantErr string // a substring of run's error, if set
+	}{
+		{"sqlite", func(t *testing.T, dir string) ([]string, string) {
+			// A directory is not a database file.
+			return []string{"-catalog.driver=sqlite", "-catalog.dsn=" + dir}, ""
+		}, ""},
+		{"postgres/refused", func(t *testing.T, dir string) ([]string, string) {
+			// Port 1 on loopback refuses at once: no server, no retry wait.
+			return []string{"-catalog.driver=postgres"}, "postgres://parkana:Sup3rS3cret@127.0.0.1:1/parkana?connect_timeout=5"
+		}, "catalog: postgres: connect"},
+		{"postgres/missing-schema", func(t *testing.T, dir string) ([]string, string) {
+			// A reachable server whose search_path names no existing schema.
+			return []string{"-catalog.driver=postgres"}, missingSchemaDSN(t, catalogtest.PostgresDSN(t))
+		}, "no existing schema"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			args, dsn := tc.args(t, dir)
+			env := map[string]string{}
+			if dsn != "" {
+				env["PARKANA_CATALOG_DSN"] = dsn
+			}
+			var stderr bytes.Buffer
+			start := time.Now()
+			err := run(t.Context(), append([]string{"-http.addr=127.0.0.1:0", "-data.dir=" + dir}, args...),
+				func(key string) string { return env[key] }, &stderr)
+			if err == nil {
+				t.Fatal("run accepted a bad catalog config")
+			}
+			if took := time.Since(start); took > 15*time.Second {
+				t.Errorf("run took %s to reject the catalog, want a fast failure", took)
+			}
+			msg := err.Error()
+			if dsn != "" {
+				msg = assertNoDSNLeak(t, dsn, msg, stderr.String())
+			}
+			if tc.wantErr != "" && !strings.Contains(msg, tc.wantErr) {
+				t.Errorf("run error = %q, want it to contain %q", msg, tc.wantErr)
+			}
+		})
 	}
+}
+
+// assertNoDSNLeak fails t if msg or logs show dsn or its password in a form
+// that would leak it: the whole DSN, the ":<password>@" userinfo or
+// "password=<password>". The bare password is checked too when it is long
+// and distinctive enough not to occur in ordinary output (a test password of
+// "parkana" is a substring of every log line). It returns msg with every
+// leaked form replaced, safe to print.
+func assertNoDSNLeak(t *testing.T, dsn, msg, logs string) string {
+	t.Helper()
+	forms := []string{dsn}
+	if u, err := url.Parse(dsn); err == nil {
+		if pw, ok := u.User.Password(); ok && pw != "" {
+			// The userinfo form as written and as URL-escaped.
+			escaped := strings.TrimPrefix(url.UserPassword("u", pw).String(), "u:")
+			forms = append(forms, ":"+pw+"@", ":"+escaped+"@", "password="+pw)
+			if len(pw) >= 8 && !strings.Contains("parkana", pw) {
+				forms = append(forms, pw)
+			} else {
+				t.Log("password too short or common for a bare-substring check; checking the DSN, userinfo and password= forms only")
+			}
+		}
+	}
+	out := msg + "\n" + logs
+	leaked := false
+	for _, f := range forms {
+		if strings.Contains(out, f) {
+			leaked = true
+			msg = strings.ReplaceAll(msg, f, "<redacted>") // never print it
+		}
+	}
+	if leaked {
+		t.Error("run's error or log shows the catalog DSN or its password")
+	}
+	return msg
+}
+
+// missingSchemaDSN returns dsn with its search_path pointing at a schema
+// that does not exist.
+func missingSchemaDSN(t *testing.T, dsn string) string {
+	t.Helper()
+	const missing = "parkana_missing_schema"
+	if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
+		// Keyword/value form: a later keyword overrides an earlier one.
+		return dsn + " search_path=" + missing
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatal("test DSN in URL form does not parse") // never echo the DSN
+	}
+	q := u.Query()
+	q.Set("search_path", missing)
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // assemblyConfig returns a valid Config for constructor-level tests.

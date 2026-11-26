@@ -188,5 +188,124 @@ func Run(t *testing.T, newCatalog func(t *testing.T) catalog.Catalog) {
 		}
 	})
 
+	t.Run("AddExistingDeleted", func(t *testing.T) {
+		c := open(t)
+		ctx := t.Context()
+		if err := c.AddFiles(ctx, file("gone", "api", 0, 1, nil)); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.ReplaceFiles(ctx, tenant.Default, []string{"gone"}, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.AddFiles(ctx, file("new", "api", 0, 1, nil), file("gone", "api", 0, 1, nil)); !errors.Is(err, catalog.ErrExists) {
+			t.Fatalf("AddFiles of a deleted key: %v, want ErrExists", err)
+		}
+		if got := keys(t, c, catalog.Filter{Tenant: tenant.Default, IncludeDeleted: true}); !slices.Equal(got, []string{"gone"}) {
+			t.Fatalf("partial add: %v", got)
+		}
+	})
+
+	// state lists every file, deleted ones included, as "key" or "key(deleted)".
+	state := func(t *testing.T, c catalog.Catalog) []string {
+		t.Helper()
+		var out []string
+		for f, err := range c.ListFiles(t.Context(), catalog.Filter{Tenant: tenant.Default, IncludeDeleted: true}) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f.Deleted() {
+				out = append(out, f.Key+"(deleted)")
+			} else {
+				out = append(out, f.Key)
+			}
+		}
+		return out
+	}
+
+	t.Run("ReplaceAddKeyInRemove", func(t *testing.T) {
+		c := open(t)
+		ctx := t.Context()
+		if err := c.AddFiles(ctx, file("s1", "api", 0, 1, nil), file("s2", "api", 1, 2, nil)); err != nil {
+			t.Fatal(err)
+		}
+		// Re-adding a key that the same call removes is not a swap: the key
+		// is still listed (deleted) when the add runs.
+		err := c.ReplaceFiles(ctx, tenant.Default, []string{"s1"}, []catalog.File{file("s1", "api", 0, 2, nil)})
+		if !errors.Is(err, catalog.ErrExists) {
+			t.Fatalf("ReplaceFiles adding a removed key: %v, want ErrExists", err)
+		}
+		if got := state(t, c); !slices.Equal(got, []string{"s1", "s2"}) {
+			t.Fatalf("failed replace changed state: %v", got)
+		}
+	})
+
+	t.Run("ReplaceAddExisting", func(t *testing.T) {
+		c := open(t)
+		ctx := t.Context()
+		if err := c.AddFiles(ctx, file("live", "api", 0, 1, nil), file("gone", "api", 1, 2, nil), file("r", "api", 2, 3, nil)); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.ReplaceFiles(ctx, tenant.Default, []string{"gone"}, nil); err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"live", "gone(deleted)", "r"}
+		for _, existing := range []string{"live", "gone"} {
+			err := c.ReplaceFiles(ctx, tenant.Default, []string{"r"},
+				[]catalog.File{file("m", "api", 0, 3, nil), file(existing, "api", 0, 3, nil)})
+			if !errors.Is(err, catalog.ErrExists) {
+				t.Fatalf("ReplaceFiles adding existing %s: %v, want ErrExists", existing, err)
+			}
+			if got := state(t, c); !slices.Equal(got, want) {
+				t.Fatalf("failed replace (add %s) changed state: %v, want %v", existing, got, want)
+			}
+		}
+	})
+
+	t.Run("ReplaceErrorPrecedence", func(t *testing.T) {
+		c := open(t)
+		ctx := t.Context()
+		if err := c.AddFiles(ctx, file("s1", "api", 0, 1, nil), file("s2", "api", 1, 2, nil)); err != nil {
+			t.Fatal(err)
+		}
+		// A missing remove key is reported before any problem with the
+		// added files.
+		for name, add := range map[string][]catalog.File{
+			"existing key":  {file("s2", "api", 0, 2, nil)},
+			"duplicate key": {file("n", "api", 0, 2, nil), file("n", "api", 0, 2, nil)},
+			"bad tenant":    {{Tenant: "not valid", Stream: "api", Key: "n"}},
+		} {
+			err := c.ReplaceFiles(ctx, tenant.Default, []string{"s1", "missing"}, add)
+			if !errors.Is(err, catalog.ErrNotFound) {
+				t.Fatalf("%s: ReplaceFiles = %v, want ErrNotFound", name, err)
+			}
+			if got := state(t, c); !slices.Equal(got, []string{"s1", "s2"}) {
+				t.Fatalf("%s: failed replace changed state: %v", name, got)
+			}
+		}
+	})
+
+	t.Run("CollationOrder", func(t *testing.T) {
+		c := open(t)
+		ctx := t.Context()
+		// Byte order differs from typical locale order for these: upper
+		// before lower case, '-' < '.' < '_', non-ASCII last.
+		names := []string{"z", "é", "a_b", "a.b", "a-b", "a", "B"}
+		var files []catalog.File
+		for _, n := range names {
+			files = append(files, file(n, n, 0, 1, nil))
+		}
+		if err := c.AddFiles(ctx, files...); err != nil {
+			t.Fatal(err)
+		}
+		want := slices.Sorted(slices.Values(names))
+		if got := keys(t, c, catalog.Filter{Tenant: tenant.Default}); !slices.Equal(got, want) {
+			t.Fatalf("ListFiles with equal MinTS = %q, want byte order %q", got, want)
+		}
+		got, err := c.Streams(ctx, tenant.Default)
+		if err != nil || !slices.Equal(got, want) {
+			t.Fatalf("Streams = %q, %v, want byte order %q", got, err, want)
+		}
+	})
+
 	RunPipelines(t, newCatalog)
 }

@@ -3,6 +3,7 @@ package compactor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"iter"
 	"maps"
 	"os"
@@ -27,6 +28,10 @@ func cleanupNow() time.Time {
 // cleanupHour keeps test literals short.
 const cleanupHour = time.Hour
 
+// testOrphans is the orphan policy of a default config: a 1h grace and the
+// 0.1 safety-stop fraction.
+var testOrphans = orphanPolicy{grace: time.Hour, maxFraction: 0.1}
+
 // cleanupStore is a small in-memory Store spy. It only implements the methods
 // cleanup uses (List and Delete); the embedded nil Store catches accidental
 // calls to the rest.
@@ -39,7 +44,9 @@ type cleanupStore struct {
 	ignorePrefix bool
 	deletes      []string
 	onList       func()
-	listCalls    int
+	// onDelete runs after every successful Delete.
+	onDelete  func()
+	listCalls int
 }
 
 func newCleanupStore() *cleanupStore {
@@ -62,6 +69,9 @@ func (s *cleanupStore) Delete(ctx context.Context, key string) error {
 		return err
 	}
 	delete(s.objects, key)
+	if s.onDelete != nil {
+		s.onDelete()
+	}
 	return nil
 }
 
@@ -232,7 +242,7 @@ func TestCleanupRetentionBoundary(t *testing.T) {
 	store.put(stale.Key, old)
 	store.put(objstore.SidecarKey(stale.Key), old)
 
-	stats, err := cleanup(t.Context(), store, cat, id, now, retention, 10*time.Minute)
+	stats, err := cleanup(t.Context(), store, cat, id, now, retention, 10*time.Minute, testOrphans)
 	if err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
@@ -263,7 +273,7 @@ func TestCleanupRetentionDisabled(t *testing.T) {
 	cleanupAdd(t, cat, ancient)
 	store.put(ancient.Key, now.Add(-1000*cleanupHour))
 
-	stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute)
+	stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute, testOrphans)
 	if err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
@@ -299,7 +309,7 @@ func TestCleanupPurgeDelayBoundary(t *testing.T) {
 		store.put(key, old)
 	}
 
-	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay)
+	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay, testOrphans)
 	if err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
@@ -335,7 +345,7 @@ func TestCleanupPurgeMissingObjects(t *testing.T) {
 	f.HasSidecar = true
 	cleanupAdd(t, cat, f)
 
-	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay)
+	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay, testOrphans)
 	if err != nil {
 		t.Fatalf("cleanup with missing objects: %v", err)
 	}
@@ -372,7 +382,7 @@ func TestCleanupPurgeRejectsForeignKeys(t *testing.T) {
 		store.put(key, old)
 	}
 
-	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay)
+	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay, testOrphans)
 	if err == nil {
 		t.Fatal("cleanup with bad purge keys returned no error")
 	}
@@ -409,10 +419,10 @@ func TestCleanupOrphans(t *testing.T) {
 		unknownKey := objstore.LogPrefix(id, "svc") + "unknown.parquet"
 		store.put(oldKey, old)
 		store.put(freshKey, now.Add(-30*time.Minute))
-		store.put(exactKey, now.Add(-cleanupOrphanGrace))
+		store.put(exactKey, now.Add(-testOrphans.grace))
 		store.put(unknownKey, time.Time{})
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0)
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, testOrphans)
 		if err != nil {
 			t.Fatalf("cleanup: %v", err)
 		}
@@ -437,7 +447,7 @@ func TestCleanupOrphans(t *testing.T) {
 		orphanKey := objstore.LogPrefix(id, "empty-stream") + "orphan.parquet"
 		store.put(orphanKey, old)
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute)
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute, testOrphans)
 		if err != nil {
 			t.Fatalf("cleanup: %v", err)
 		}
@@ -461,7 +471,7 @@ func TestCleanupOrphans(t *testing.T) {
 		store.put(key, old)
 		store.put(objstore.SidecarKey(key), old)
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0)
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, testOrphans)
 		if err != nil {
 			t.Fatalf("cleanup: %v", err)
 		}
@@ -506,7 +516,7 @@ func TestCleanupProtectsSidecarWhoseFlagFailed(t *testing.T) {
 	// Age the sidecar past the orphan grace period; with backfill off, the
 	// next cycle's orphan scan sees an old unreferenced-by-flag object that
 	// the live row must still protect.
-	old := time.Now().Add(-2 * cleanupOrphanGrace)
+	old := time.Now().Add(-2 * s.cfg.OrphanGrace)
 	root, err := os.OpenRoot(d.dir)
 	if err != nil {
 		t.Fatalf("OpenRoot: %v", err)
@@ -568,7 +578,7 @@ func TestCleanupTenantIsolation(t *testing.T) {
 		store.put(key, old)
 	}
 
-	stats, err := cleanup(t.Context(), store, cat, id, now, retention, 10*time.Minute)
+	stats, err := cleanup(t.Context(), store, cat, id, now, retention, 10*time.Minute, testOrphans)
 	if err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
@@ -619,7 +629,7 @@ func TestCleanupErrors(t *testing.T) {
 		orphan := objstore.LogPrefix(id, "svc") + "orphan.parquet"
 		store.put(orphan, old)
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, cleanupHour, 10*time.Minute)
+		stats, err := cleanup(t.Context(), store, cat, id, now, cleanupHour, 10*time.Minute, testOrphans)
 		if !errors.Is(err, errReplace) {
 			t.Fatalf("err = %v, want %v", err, errReplace)
 		}
@@ -647,7 +657,7 @@ func TestCleanupErrors(t *testing.T) {
 		orphan := objstore.LogPrefix(id, "svc") + "orphan.parquet"
 		store.put(orphan, old)
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute)
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute, testOrphans)
 		if !errors.Is(err, errPurge) {
 			t.Fatalf("err = %v, want %v", err, errPurge)
 		}
@@ -666,7 +676,7 @@ func TestCleanupErrors(t *testing.T) {
 		orphan := objstore.LogPrefix(id, "svc") + "orphan.parquet"
 		store.put(orphan, now.Add(-2*cleanupHour))
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0)
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, testOrphans)
 		if !errors.Is(err, errList) {
 			t.Fatalf("err = %v, want %v", err, errList)
 		}
@@ -685,7 +695,7 @@ func TestCleanupErrors(t *testing.T) {
 		store.failList = true
 		store.listErr = errList
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0)
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, testOrphans)
 		if !errors.Is(err, errList) {
 			t.Fatalf("err = %v, want %v", err, errList)
 		}
@@ -712,7 +722,7 @@ func TestCleanupErrors(t *testing.T) {
 		store.deleteErrs[first.Key] = errDeleteData
 		store.deleteErrs[objstore.SidecarKey(second.Key)] = errDeleteSidecar
 
-		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute)
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 10*time.Minute, testOrphans)
 		if !errors.Is(err, errDeleteData) || !errors.Is(err, errDeleteSidecar) {
 			t.Fatalf("err = %v, want both delete failures", err)
 		}
@@ -740,7 +750,7 @@ func TestCleanupFailedDeleteRecoveredByOrphanScan(t *testing.T) {
 	store.put(f.Key, now.Add(-2*cleanupHour))
 	store.deleteErrs[f.Key] = errDelete
 
-	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay)
+	stats, err := cleanup(t.Context(), store, cat, id, now, 0, delay, testOrphans)
 	if !errors.Is(err, errDelete) {
 		t.Fatalf("first cleanup err = %v, want %v", err, errDelete)
 	}
@@ -753,7 +763,7 @@ func TestCleanupFailedDeleteRecoveredByOrphanScan(t *testing.T) {
 	// orphan once it is past the grace period.
 	delete(store.deleteErrs, f.Key)
 	later := now.Add(2 * cleanupHour)
-	stats, err = cleanup(t.Context(), store, cat, id, later, 0, delay)
+	stats, err = cleanup(t.Context(), store, cat, id, later, 0, delay, testOrphans)
 	if err != nil {
 		t.Fatalf("second cleanup: %v", err)
 	}
@@ -778,7 +788,7 @@ func TestCleanupRetentionCancellationBeforeReplace(t *testing.T) {
 	cat.cancelAfterList = 1
 	cat.cancelList = cancel
 
-	stats, err := cleanup(ctx, store, cat, id, now, cleanupHour, 10*time.Minute)
+	stats, err := cleanup(ctx, store, cat, id, now, cleanupHour, 10*time.Minute, testOrphans)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
@@ -808,7 +818,7 @@ func TestCleanupCancellation(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		stats, err := cleanup(ctx, store, cat, id, now, cleanupHour, 10*time.Minute)
+		stats, err := cleanup(ctx, store, cat, id, now, cleanupHour, 10*time.Minute, testOrphans)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want context.Canceled", err)
 		}
@@ -839,7 +849,7 @@ func TestCleanupCancellation(t *testing.T) {
 		cat.cancelAfterList = 1
 		cat.cancelList = cancel
 
-		stats, err := cleanup(ctx, store, cat, id, now, 0, 0)
+		stats, err := cleanup(ctx, store, cat, id, now, 0, 0, testOrphans)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want context.Canceled", err)
 		}
@@ -855,7 +865,10 @@ func TestCleanupCancellation(t *testing.T) {
 		cleanupRequireObject(t, store, orphan, true)
 	})
 
-	t.Run("mid orphan scan stops", func(t *testing.T) {
+	// The orphan scan lists everything before it deletes anything, so the
+	// safety stop sees the whole tenant: a listing canceled part way deletes
+	// nothing.
+	t.Run("mid orphan listing deletes nothing", func(t *testing.T) {
 		cat := newCleanupCatalog(t)
 		store := newCleanupStore()
 		first := objstore.LogPrefix(id, "svc") + "first.parquet"
@@ -865,14 +878,207 @@ func TestCleanupCancellation(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(t.Context())
 		store.onList = cancel
-		stats, err := cleanup(ctx, store, cat, id, now, 0, 0)
+		stats, err := cleanup(ctx, store, cat, id, now, 0, 0, testOrphans)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err = %v, want context.Canceled", err)
+		}
+		if stats != (cleanupStats{}) {
+			t.Fatalf("stats = %+v, want zero", stats)
+		}
+		if len(store.deletes) != 0 {
+			t.Fatalf("deletes = %v, want none", store.deletes)
+		}
+		cleanupRequireObject(t, store, first, true)
+		cleanupRequireObject(t, store, second, true)
+	})
+
+	t.Run("mid orphan deletion stops", func(t *testing.T) {
+		cat := newCleanupCatalog(t)
+		store := newCleanupStore()
+		first := objstore.LogPrefix(id, "svc") + "first.parquet"
+		second := objstore.LogPrefix(id, "svc") + "second.parquet"
+		store.put(first, now.Add(-2*cleanupHour))
+		store.put(second, now.Add(-2*cleanupHour))
+
+		ctx, cancel := context.WithCancel(t.Context())
+		store.onDelete = cancel
+		stats, err := cleanup(ctx, store, cat, id, now, 0, 0, testOrphans)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("err = %v, want context.Canceled", err)
 		}
 		if stats.orphaned != 1 {
 			t.Fatalf("orphaned = %d, want 1", stats.orphaned)
 		}
+		if len(store.deletes) != 1 {
+			t.Fatalf("deletes = %v, want only the first", store.deletes)
+		}
 		cleanupRequireObject(t, store, first, false)
 		cleanupRequireObject(t, store, second, true)
 	})
+}
+
+// TestCleanupOrphanGrace covers the configurable grace: 0 turns the orphan
+// scan off without touching the store or the catalog, and a raised grace
+// keeps an orphan younger than it while deleting an older one.
+func TestCleanupOrphanGrace(t *testing.T) {
+	id := tenant.ID("acme")
+	now := cleanupNow()
+
+	t.Run("zero disables the scan", func(t *testing.T) {
+		cat := newCleanupCatalog(t)
+		store := newCleanupStore()
+		ancient := objstore.LogPrefix(id, "svc") + "ancient.parquet"
+		store.put(ancient, now.Add(-1000*cleanupHour))
+
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, orphanPolicy{grace: 0, maxFraction: 0.1})
+		if err != nil {
+			t.Fatalf("cleanup: %v", err)
+		}
+		if stats != (cleanupStats{}) {
+			t.Fatalf("stats = %+v, want zero", stats)
+		}
+		if store.listCalls != 0 {
+			t.Fatalf("Store.List calls = %d, want 0", store.listCalls)
+		}
+		if len(store.deletes) != 0 {
+			t.Fatalf("deletes = %v, want none", store.deletes)
+		}
+		cleanupRequireObject(t, store, ancient, true)
+	})
+
+	t.Run("custom grace", func(t *testing.T) {
+		cat := newCleanupCatalog(t)
+		store := newCleanupStore()
+		young := objstore.LogPrefix(id, "svc") + "young.parquet"
+		exact := objstore.LogPrefix(id, "svc") + "exact.parquet"
+		old := objstore.LogPrefix(id, "svc") + "old.parquet"
+		store.put(young, now.Add(-90*time.Minute))
+		store.put(exact, now.Add(-2*cleanupHour))
+		store.put(old, now.Add(-3*cleanupHour))
+
+		stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, orphanPolicy{grace: 2 * cleanupHour, maxFraction: 1})
+		if err != nil {
+			t.Fatalf("cleanup: %v", err)
+		}
+		if want := (cleanupStats{orphaned: 1}); stats != want {
+			t.Fatalf("stats = %+v, want %+v", stats, want)
+		}
+		cleanupRequireObject(t, store, young, true)
+		cleanupRequireObject(t, store, exact, true)
+		cleanupRequireObject(t, store, old, false)
+	})
+}
+
+// cleanupOrphanFixture stores referenced live files and unreferenced old
+// objects for safety-stop tests. Fresh unreferenced objects count as listed
+// but are not candidates. It returns the orphan keys in listing order.
+func cleanupOrphanFixture(t *testing.T, cat catalog.Catalog, store *cleanupStore, id tenant.ID, now time.Time, referenced, orphans, fresh int) []string {
+	t.Helper()
+	old := now.Add(-3 * cleanupHour)
+	for i := range referenced {
+		f := cleanupFile(id, "svc", fmt.Sprintf("%sref-%03d.parquet", objstore.LogPrefix(id, "svc"), i),
+			now.Add(-4*cleanupHour), now.Add(-3*cleanupHour))
+		cleanupAdd(t, cat, f)
+		store.put(f.Key, old)
+	}
+	keys := make([]string, 0, orphans)
+	for i := range orphans {
+		key := fmt.Sprintf("%sorphan-%03d.parquet", objstore.LogPrefix(id, "svc"), i)
+		store.put(key, old)
+		keys = append(keys, key)
+	}
+	for i := range fresh {
+		store.put(fmt.Sprintf("%sfresh-%03d.parquet", objstore.LogPrefix(id, "svc"), i), now.Add(-time.Minute))
+	}
+	return keys
+}
+
+// TestCleanupOrphanSafetyStop covers the guard that refuses to delete when
+// the candidates are both at least config.OrphanMinCandidates and more than
+// maxFraction of the listed objects: a wrong, empty or rolled-back catalog
+// makes most objects look orphaned.
+func TestCleanupOrphanSafetyStop(t *testing.T) {
+	id := tenant.ID("acme")
+	now := cleanupNow()
+
+	for _, tc := range []struct {
+		name                       string
+		referenced, orphans, fresh int
+		maxFraction                float64
+		wantSkip                   bool
+	}{
+		{name: "trips on 20 of 50", referenced: 30, orphans: 20, maxFraction: 0.1, wantSkip: true},
+		{name: "trips on empty catalog", orphans: 40, maxFraction: 0.1, wantSkip: true},
+		{name: "trips at the floor", orphans: 10, maxFraction: 0.1, wantSkip: true},
+		{name: "below the floor deletes", referenced: 1, orphans: 5, maxFraction: 0.1},
+		{name: "nine of nine deletes", orphans: 9, maxFraction: 0.1},
+		{name: "exactly the fraction deletes", referenced: 90, orphans: 10, maxFraction: 0.1},
+		{name: "fresh objects count as listed", orphans: 10, fresh: 90, maxFraction: 0.1},
+		{name: "fraction one never skips", orphans: 40, maxFraction: 1},
+		{name: "fraction one with references", referenced: 5, orphans: 40, maxFraction: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cat := newCleanupCatalog(t)
+			store := newCleanupStore()
+			orphans := cleanupOrphanFixture(t, cat, store, id, now, tc.referenced, tc.orphans, tc.fresh)
+
+			stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, orphanPolicy{grace: time.Hour, maxFraction: tc.maxFraction})
+			if err != nil {
+				t.Fatalf("cleanup: %v", err)
+			}
+			if !tc.wantSkip {
+				if want := (cleanupStats{orphaned: tc.orphans}); stats != want {
+					t.Fatalf("stats = %+v, want %+v", stats, want)
+				}
+				for _, key := range orphans {
+					cleanupRequireObject(t, store, key, false)
+				}
+				return
+			}
+			if len(store.deletes) != 0 {
+				t.Fatalf("deletes = %v, want none", store.deletes)
+			}
+			for _, key := range orphans {
+				cleanupRequireObject(t, store, key, true)
+			}
+			skip := stats.orphanSkip
+			if skip == nil || stats.orphaned != 0 || stats.marked != 0 || stats.purged != 0 {
+				t.Fatalf("stats = %+v, want only a skip", stats)
+			}
+			listed := tc.referenced + tc.orphans + tc.fresh
+			if skip.candidates != tc.orphans || skip.listed != listed || skip.referenced != tc.referenced {
+				t.Fatalf("skip = %+v, want candidates %d, listed %d, referenced %d", *skip, tc.orphans, listed, tc.referenced)
+			}
+			if want := orphans[:min(len(orphans), orphanGuardSample)]; !slices.Equal(skip.sample, want) {
+				t.Fatalf("sample = %v, want %v", skip.sample, want)
+			}
+		})
+	}
+}
+
+// TestCleanupOrphanListFailureDeletesNothing: a listing that fails part way
+// leaves the safety stop without a reliable denominator, so nothing is
+// deleted even though old orphans were already seen.
+func TestCleanupOrphanListFailureDeletesNothing(t *testing.T) {
+	id := tenant.ID("acme")
+	now := cleanupNow()
+	errList := errors.New("list failed late")
+	cat := newCleanupCatalog(t)
+	store := newCleanupStore()
+	orphans := cleanupOrphanFixture(t, cat, store, id, now, 0, 3, 0)
+	store.listErr = errList
+
+	stats, err := cleanup(t.Context(), store, cat, id, now, 0, 0, testOrphans)
+	if !errors.Is(err, errList) {
+		t.Fatalf("err = %v, want %v", err, errList)
+	}
+	if stats != (cleanupStats{}) {
+		t.Fatalf("stats = %+v, want zero", stats)
+	}
+	if len(store.deletes) != 0 {
+		t.Fatalf("deletes = %v, want none", store.deletes)
+	}
+	for _, key := range orphans {
+		cleanupRequireObject(t, store, key, true)
+	}
 }

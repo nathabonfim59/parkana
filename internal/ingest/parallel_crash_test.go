@@ -2256,9 +2256,20 @@ func TestParallelCrashAmbiguousSidecarPut(t *testing.T) {
 	uploadSidecarBytes(t, f, file.Key)
 }
 
+// TestParallelCrashAmbiguousAddFiles runs parallelCrashAmbiguousAddFiles on
+// both persistent catalogs; the postgres subtest skips unless
+// PARKANA_TEST_POSTGRES_DSN is set.
 func TestParallelCrashAmbiguousAddFiles(t *testing.T) {
+	for _, kind := range []uploadCatalogKind{uploadCatalogSQLite, uploadCatalogPostgres} {
+		t.Run(string(kind), func(t *testing.T) { parallelCrashAmbiguousAddFiles(t, kind) })
+	}
+}
+
+// parallelCrashAmbiguousAddFiles proves an AddFiles that committed but
+// reported an error is recognized after a reopen: no second Put or AddFiles.
+func parallelCrashAmbiguousAddFiles(t *testing.T, kind uploadCatalogKind) {
 	hour := time.Date(2026, 11, 4, 15, 0, 0, 0, time.UTC)
-	f := uploadNewFixtureKind(t, uploadCatalogSQLite, nil)
+	f := uploadNewFixtureKind(t, kind, nil)
 	source := f.seed(tenant.Default, "api", hour, []uploadRow{{ts: hour.Add(time.Minute), line: "ambiguous addfiles"}})
 	addErr := errors.New("ambiguous catalog add")
 	firstCat := &parallelCrashAddThenFail{Catalog: f.cat, err: addErr}
@@ -2309,9 +2320,20 @@ func TestParallelCrashAmbiguousAddFiles(t *testing.T) {
 	}
 }
 
+// TestParallelCrashTombstoneIsNotResurrected runs
+// parallelCrashTombstoneIsNotResurrected on both persistent catalogs; the
+// postgres subtest skips unless PARKANA_TEST_POSTGRES_DSN is set.
 func TestParallelCrashTombstoneIsNotResurrected(t *testing.T) {
+	for _, kind := range []uploadCatalogKind{uploadCatalogSQLite, uploadCatalogPostgres} {
+		t.Run(string(kind), func(t *testing.T) { parallelCrashTombstoneIsNotResurrected(t, kind) })
+	}
+}
+
+// parallelCrashTombstoneIsNotResurrected proves a tombstoned upload stays a
+// tombstone across a reopen and is never re-Put.
+func parallelCrashTombstoneIsNotResurrected(t *testing.T, kind uploadCatalogKind) {
 	hour := time.Date(2026, 11, 4, 16, 0, 0, 0, time.UTC)
-	f := uploadNewFixtureKind(t, uploadCatalogSQLite, nil)
+	f := uploadNewFixtureKind(t, kind, nil)
 	source := f.seed(tenant.Default, "api", hour, []uploadRow{{ts: hour.Add(time.Minute), line: "tombstoned"}})
 	addErr := errors.New("ambiguous catalog add")
 	firstCat := &parallelCrashAddThenFail{Catalog: f.cat, err: addErr}

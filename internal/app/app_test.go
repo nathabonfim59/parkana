@@ -16,6 +16,7 @@ import (
 
 	"github.com/nathabonfim59/parkana/internal/app"
 	"github.com/nathabonfim59/parkana/internal/catalog"
+	"github.com/nathabonfim59/parkana/internal/catalog/catalogtest"
 	"github.com/nathabonfim59/parkana/internal/config"
 	"github.com/nathabonfim59/parkana/internal/objstore"
 	"github.com/nathabonfim59/parkana/internal/tenant"
@@ -45,7 +46,7 @@ func TestOpenCatalogSQLiteCreatesDirectoryAndPersists(t *testing.T) {
 		t.Fatalf("Catalog.DSN = %q, want derived %q", cfg.Catalog.DSN, want)
 	}
 
-	cat, err := app.OpenCatalog(cfg)
+	cat, err := app.OpenCatalog(t.Context(), cfg)
 	if err != nil {
 		t.Fatalf("OpenCatalog: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestOpenCatalogSQLiteCreatesDirectoryAndPersists(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	cat, err = app.OpenCatalog(cfg)
+	cat, err = app.OpenCatalog(t.Context(), cfg)
 	if err != nil {
 		t.Fatalf("reopen OpenCatalog: %v", err)
 	}
@@ -97,7 +98,7 @@ func TestOpenCatalogSQLiteCreatesDirectoryAndPersists(t *testing.T) {
 
 func TestOpenCatalogMemory(t *testing.T) {
 	cfg := loadConfig(t, "-catalog.driver=memory")
-	cat, err := app.OpenCatalog(cfg)
+	cat, err := app.OpenCatalog(t.Context(), cfg)
 	if err != nil {
 		t.Fatalf("OpenCatalog: %v", err)
 	}
@@ -115,6 +116,54 @@ func TestOpenCatalogMemory(t *testing.T) {
 	}
 	if err := cat.AddFiles(t.Context(), file); err != nil {
 		t.Fatalf("AddFiles: %v", err)
+	}
+}
+
+// TestOpenCatalogPostgres opens the postgres driver on a fresh schema, writes
+// a file and reads it back through a second handle. It runs only when
+// PARKANA_TEST_POSTGRES_DSN is set (see catalogtest.PostgresDSN).
+func TestOpenCatalogPostgres(t *testing.T) {
+	// Build the config directly: a failing config.Load would print its
+	// arguments, and the DSN may hold a password.
+	cfg := config.Config{Catalog: config.Catalog{Driver: "postgres", DSN: catalogtest.PostgresDSN(t)}}
+	ctx := t.Context()
+	cat, err := app.OpenCatalog(ctx, cfg)
+	if err != nil {
+		t.Fatalf("OpenCatalog: %v", err)
+	}
+	t.Cleanup(func() { cat.Close() })
+	if _, ok := cat.(*catalog.Postgres); !ok {
+		t.Fatalf("OpenCatalog returned %T, want *catalog.Postgres", cat)
+	}
+	minTS := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	want := catalog.File{
+		Tenant: tenant.Default,
+		Stream: "checkout",
+		Key:    objstore.NewDataKey(tenant.Default, "checkout", minTS),
+		MinTS:  minTS,
+		MaxTS:  minTS.Add(time.Minute),
+		Rows:   3,
+	}
+	if err := cat.AddFiles(ctx, want); err != nil {
+		t.Fatalf("AddFiles: %v", err)
+	}
+	if err := cat.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	cat, err = app.OpenCatalog(ctx, cfg)
+	if err != nil {
+		t.Fatalf("reopen OpenCatalog: %v", err)
+	}
+	var got []catalog.File
+	for f, err := range cat.ListFiles(ctx, catalog.Filter{Tenant: tenant.Default, Stream: "checkout"}) {
+		if err != nil {
+			t.Fatalf("ListFiles: %v", err)
+		}
+		got = append(got, f)
+	}
+	if len(got) != 1 || got[0].Key != want.Key || got[0].Rows != want.Rows {
+		t.Fatalf("reopened catalog files = %+v, want one with key %q rows %d", got, want.Key, want.Rows)
 	}
 }
 
@@ -269,8 +318,16 @@ func TestOpenCatalogErrors(t *testing.T) {
 	}{
 		{
 			name: "unknown driver",
-			cfg:  config.Config{Catalog: config.Catalog{Driver: "postgres"}},
+			cfg:  config.Config{Catalog: config.Catalog{Driver: "mysql"}},
 			want: "unknown catalog driver",
+		},
+		{
+			// A URL that pgx cannot parse fails before any network I/O, so
+			// this case runs without a database. The password must stay out
+			// of the error.
+			name: "postgres bad DSN",
+			cfg:  config.Config{Catalog: config.Catalog{Driver: "postgres", DSN: "postgres://parkana:Sup3rS3cret@db:notaport/parkana"}},
+			want: "catalog driver postgres:",
 		},
 		{
 			name: "sqlite without path",
@@ -279,13 +336,16 @@ func TestOpenCatalogErrors(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cat, err := app.OpenCatalog(tc.cfg)
+			cat, err := app.OpenCatalog(t.Context(), tc.cfg)
 			if err == nil {
 				cat.Close()
 				t.Fatal("OpenCatalog accepted invalid config")
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("OpenCatalog error = %q, want it to contain %q", err, tc.want)
+			}
+			if strings.Contains(err.Error(), "Sup3rS3cret") {
+				t.Errorf("OpenCatalog error shows the DSN password: %q", err)
 			}
 			if cat != nil {
 				t.Error("OpenCatalog returned a catalog with an error")

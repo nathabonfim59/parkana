@@ -57,6 +57,12 @@ type metrics struct {
 	rotLast   map[tenant.ID]uint64
 
 	pending *prometheus.GaugeVec // sealed generations awaiting publication
+
+	// Quarantine retention (quarantine.go): per-tenant usage of
+	// parquet/<tenant>/.quarantine/ and failed sweeps.
+	quarantineFiles *prometheus.GaugeVec
+	quarantineBytes *prometheus.GaugeVec
+	quarantineErrs  prometheus.Counter
 }
 
 // newMetrics registers every collector on reg. If registration fails partway,
@@ -157,6 +163,18 @@ func newMetrics(reg prometheus.Registerer) (*metrics, error) {
 			Name: "parkana_ingest_pending_generations",
 			Help: "Sealed generations awaiting local publication.",
 		}, []string{"tenant"}),
+		quarantineFiles: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "parkana_ingest_quarantine_files",
+			Help: "Regular files in the tenant's local quarantine directory.",
+		}, []string{"tenant"}),
+		quarantineBytes: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "parkana_ingest_quarantine_bytes",
+			Help: "Bytes of the regular files in the tenant's local quarantine directory.",
+		}, []string{"tenant"}),
+		quarantineErrs: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "parkana_ingest_quarantine_sweep_errors_total",
+			Help: "Quarantine sweep steps that failed; the files stay and the next sweep retries.",
+		}),
 	}
 	collectors := []prometheus.Collector{
 		m.lines, m.bytes, m.walSync, m.walErrs, m.replay,
@@ -164,6 +182,7 @@ func newMetrics(reg prometheus.Registerer) (*metrics, error) {
 		m.mergeSeconds, m.putSeconds, m.activeJobs, m.jobSourceBytes,
 		m.inFlightEstimateBytes, m.oversizedJobs,
 		m.rotations, m.pending,
+		m.quarantineFiles, m.quarantineBytes, m.quarantineErrs,
 	}
 	registered := make([]prometheus.Collector, 0, len(collectors))
 	for _, c := range collectors {

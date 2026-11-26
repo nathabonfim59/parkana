@@ -24,6 +24,7 @@
 // An evalGrid keeps the nominal times (what parents index by, never rounded)
 // next to the emitted times. metricSeries carries parallel steps/outs slices so
 // no parent ever joins children by rounded timestamps.
+
 package logql
 
 import (

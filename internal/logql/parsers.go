@@ -47,6 +47,7 @@
 // cannot hold the duplicate names Loki emits for a parsed field called
 // __error__/__error_details__, so the builder error state appended at output
 // wins (see entryParsed).
+
 package logql
 
 import (

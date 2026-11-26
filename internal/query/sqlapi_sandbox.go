@@ -25,6 +25,7 @@
 //     directories cannot change once external access is off
 //     (custom_settings.cpp:324-391), and lock_configuration rejects every
 //     later setting change except schema/search_path (config.cpp:661-681).
+
 package query
 
 import (

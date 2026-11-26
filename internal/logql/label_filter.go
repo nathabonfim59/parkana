@@ -12,6 +12,7 @@
 // BinaryLabelFilter evaluates both sides of an AND even when the left side is
 // already false, because the right side's conversion error is observable. OR
 // short-circuits when the left side keeps the row.
+
 package logql
 
 import (

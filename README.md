@@ -7,130 +7,65 @@ Explore, dashboards, the logs panel, live tail and Grafana-managed alerts work
 unchanged,
 and a SQL datasource plugin adds ad-hoc SQL over the same data.
 
-Current release: **1.0.0**. See the [changelog](CHANGELOG.md).
+Current release: **1.2.0**. See the [changelog](CHANGELOG.md).
 
 ## Features
 
-- **Loki API.** Push (protobuf+snappy and JSON), `query`, `query_range`,
-  labels, label values, series, index stats and volume, and live tail over
-  WebSocket. Alloy, Promtail and `logcli` work unchanged.
-- **OTLP ingest.** `POST /v1/logs` (protobuf and JSON, gzip) maps resources,
-  scopes and attributes to labels and structured metadata the way Loki does.
-- **Parquet on S3.** Parquet objects keyed by tenant, stream and hour, with a
-  SQLite catalog of files, time ranges and label values. Any S3-compatible
-  store works (AWS S3, Garage, MinIO, Ceph, R2), or a local directory.
-- **Fast search.** Per-file n-gram bloom sidecars let `|=` searches skip files
-  that cannot match; label summaries prune files by stream labels.
-- **Pipelines.** Per-stream steps (`parse_json`, `parse_logfmt`,
-  `regex_extract`, `drop_if`, `rename`, `redact`, `promote`, `set_stream`)
-  with `expr` conditions, run at ingest or when reading. Managed over
-  `/api/v1/pipelines`, versioned, hot-reloaded, with a dry run.
-- **SQL.** `POST /api/v1/sql` runs read-only DuckDB SQL over one tenant's data
-  in a time range, inside a per-request sandbox. A Grafana datasource plugin
-  returns tables and time series.
-- **Durable ingest.** Every acknowledged push is in an fsynced WAL by default;
-  `-wal.sync=interval` trades that for Loki-like acknowledgment latency.
-  Parallel flush and upload, admitted against a memory budget.
-- **One binary.** Ingester, querier and compactor run together by default and
-  share nothing in memory, so they can run as separate processes.
+- It serves the Loki push and read API with live tail, so Alloy, Promtail and `logcli` work unchanged.
+- It takes OTLP logs on `POST /v1/logs` and maps them to labels and metadata the way Loki does.
+- It stores Parquet on local disk or an S3-compatible store (tested with Garage).
+- Search sidecars let `|=` searches skip files that cannot match.
+- Ingest and read pipelines parse, redact, drop and promote fields.
+- `POST /api/v1/sql` runs read-only DuckDB SQL over one tenant's logs, with a Grafana plugin.
+- Every acknowledged push is in an fsynced write-ahead log by default.
+- One binary runs the ingester, querier and compactor, together or as separate processes.
 
 ## Install
 
 Release packages for x86-64 Linux with glibc 2.34 or newer (Debian 12,
-Ubuntu 22.04 and later, RHEL/Rocky/Alma 9, Fedora):
+Ubuntu 22.04 and later, RHEL/Rocky/Alma 9, Fedora), from the
+[1.2.0 release](https://github.com/nathabonfim59/parkana/releases/tag/v1.2.0):
 
 ```sh
-sudo apt install ./parkana_1.0.0-1_amd64.deb      # Debian, Ubuntu
-sudo dnf install ./parkana-1.0.0-1.x86_64.rpm     # RHEL, Rocky, Alma, Fedora
+sudo apt install ./parkana_1.2.0-1_amd64.deb      # Debian, Ubuntu
+sudo dnf install ./parkana-1.2.0-1.x86_64.rpm     # RHEL, Rocky, Alma, Fedora
 sudoedit /etc/parkana/parkana.env                 # storage, retention, ...
 sudo systemctl enable --now parkana
 ```
 
-The packages add a `parkana` system user, `/var/lib/parkana`, a hardened
-systemd unit and `/etc/parkana/parkana.env`; the service is not started until
-you enable it. A plain tarball with the binary is also published. Alpine is
-not packaged in 1.0.0 (DuckDB has no musl build yet); use a glibc container
-there.
-
-## Quick start
-
-Build from source (Go 1.27 and a C toolchain; DuckDB links statically):
-
-```sh
-make build            # bin/parkana
-./bin/parkana -data.dir ./data -ingest.upload-max-age 30s
-```
-
-Parkana listens on `:3100`. Logs become queryable once uploaded; the short
-`-ingest.upload-max-age` above makes that happen within about half a minute
-(the default is 10 minutes). Push a line and read it back:
-
-```sh
-now=$(date +%s%N)
-curl -s -X POST localhost:3100/loki/api/v1/push -H 'Content-Type: application/json' \
-  -d '{"streams":[{"stream":{"service_name":"demo"},"values":[["'$now'","hello parkana"]]}]}'
-sleep 45
-curl -s -G localhost:3100/loki/api/v1/query_range \
-  --data-urlencode 'query={service_name="demo"}'
-```
-
-In Grafana, add a **Loki** datasource with URL `http://<host>:3100`.
-
-For S3 storage, roles, durability, memory and every other setting, see the
-[configuration guide](docs/configuration.md).
-
-### Development stack
-
-`deploy/compose/` runs Garage (S3), Parkana, Loki, Alloy and Grafana side by
-side, with Alloy sending the same logs to both stores:
-
-```sh
-cd deploy/compose
-docker compose --profile phase2 up --build
-```
-
-Grafana is on `http://127.0.0.1:3000` with both datasources provisioned. The
-stack uses throwaway credentials and anonymous admin; it is for development
-only. Overlays add OTLP (`otlp.compose.yaml`) and the SQL plugin (`sql.yaml`).
+The tarball, a container build and a build from source are in
+[Getting started](docs/getting-started.md).
 
 ## Documentation
 
-| page | covers |
-|---|---|
-| [Configuration](docs/configuration.md) | every flag and environment variable, roles, tuning, production checklist |
-| [LogQL compatibility](docs/logql.md) | supported LogQL, Grafana behavior, the Loki comparison corpus |
-| [Pipelines](docs/pipelines.md) | step reference, API, ingest and read semantics, costs |
-| [OTLP](docs/otlp.md) | `/v1/logs` mapping, Alloy and Collector setup |
-| [SQL](docs/sql.md) | `/api/v1/sql`, the `logs` relation, sandbox and limits, Grafana plugin |
-| [Benchmarks](docs/benchmarks.md) | Parkana vs Loki: ingest, search latency, storage, method and evidence |
-| [PLAN.md](PLAN.md) | design and recorded decisions |
+The documentation site is <https://nathabonfim59.github.io/parkana/>. The
+same pages are in [`docs/`](docs/):
 
-## Performance
+- [Getting started](docs/getting-started.md): install, first run, push a line and query it
+- [Install with an agent](docs/agent-install.md): the steps a coding agent follows to install and check Parkana
+- [Deploy](docs/deploy.md): the systemd package, Docker, the development stack, separate roles, sizing
+- [Configuration](docs/configuration.md): every flag and environment variable, tuning, production checklist
+- [Grafana](docs/grafana.md): the Loki data source, alerting, differences from Loki, the SQL plugin
+- [LogQL compatibility](docs/query/logql.md): supported LogQL, what Grafana sends; the [Loki comparison](docs/development/loki-comparison.md) corpus
+- [Ingest](docs/ingest.md) and [OTLP](docs/ingest.md#otlp): sending logs, the WAL and uploads, the OTLP mapping
+- [Pipelines](docs/pipelines/index.md): [step reference](docs/pipelines/steps.md), [API](docs/pipelines/api.md), ingest and [read semantics](docs/pipelines/read.md)
+- [SQL](docs/query/sql.md): `/api/v1/sql`, the `logs` relation, the sandbox and limits
+- [Operations](docs/operations.md): health checks, metrics, logging, troubleshooting
+- [Benchmarks](docs/benchmarks.md): Parkana against Loki for ingest, search latency and storage
+- [Architecture](docs/architecture.md) and [PLAN.md](PLAN.md): how it works and the recorded decisions
 
-On a Boat large VM (8 vCPU, Parkana limited to 4 CPUs and 8 GiB), measured as
-described in [benchmarks](docs/benchmarks.md):
-
-- **Search** (25 GB of logs, phase 3 run): `|=` for a rare string over the full
-  range answered in 166 ms median vs 20.2 s for Loki 3.7.9; absent strings in
-  under 1 ms.
-- **Ingest** (4 GB across four streams, 1.0.0): 68.6 MB/s acknowledged, every
-  line queryable 35.7 s after the last acknowledgment (42.5 MB/s end to end).
-- **Storage** (the same 25 GB run): 5.13 GB of Parquet vs 5.75 GB in Loki;
-  search sidecars add 0.07%.
-
-## Limits in 1.0.0
+## Limits in 1.2.0
 
 - Single tenant: `X-Scope-OrgID` must be absent or `default`.
 - No request authentication; put `/api/v1/sql` and `/api/v1/pipelines` behind
-  your own access control. The SQL memory limit bounds DuckDB's buffers, not
-  the process.
+  your own access control ([Security](docs/security.md) shows how). The SQL
+  memory limit bounds DuckDB's buffers, not the process.
 - Data is queryable after upload, not straight from the ingester's memory
   (live tail is the exception).
 - A tenant with any read pipeline loses filter and limit pushdown for its log
   queries.
 - The Grafana SQL plugin is unsigned.
-- Materialized views, the Postgres catalog and multi-node fan-out are planned
-  (PLAN.md §10).
+- Materialized views and multi-node fan-out are planned (PLAN.md §10).
 
 ## License
 

@@ -1,0 +1,131 @@
+name: Release
+
+# Builds the release files for a v* tag and attaches them to a DRAFT GitHub
+# release: the parkana binary as a tarball, the deb and rpm, the Grafana SQL
+# datasource plugin zip and SHA256SUMS. The draft is created, or updated while
+# it is still a draft; a published release is never changed (the job fails).
+# Publishing stays a manual step. The parkana files are built with the same
+# digest-pinned container and make targets as a local release build
+# (docs/development/index.md, "Release builds").
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build, e.g. v1.2.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  parkana:
+    name: Parkana binary and packages
+    runs-on: ubuntu-26.04
+    # golang:1.27.3-bookworm (glibc 2.36), the image the Dockerfile and the
+    # local release build pin.
+    container:
+      image: golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9
+    steps:
+      - name: Check the tag name
+        run: |
+          printf '%s\n' "$TAG" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?' \
+            || { echo "::error::not a release tag: $TAG"; exit 1; }
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+      - name: Trust the checkout (the container runs as root)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: make build
+        run: make build VERSION="$TAG" REVISION="$(git rev-parse HEAD)" BRANCH=main
+      - name: make packages
+        run: make packages VERSION="$TAG"
+      - name: make tarball
+        run: make tarball VERSION="$TAG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: parkana
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  plugin:
+    name: Grafana plugin
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check the tag name
+        run: |
+          printf '%s\n' "$TAG" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?' \
+            || { echo "::error::not a release tag: $TAG"; exit 1; }
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: grafana/parkana-datasource/go.mod
+          cache-dependency-path: grafana/parkana-datasource/go.sum
+      - name: Backend go vet and go test
+        run: make plugin-check
+        env:
+          CGO_ENABLED: '0'
+      # The frontend builds in the plugin's pinned Node container (docker on the runner).
+      - name: make plugin-dist
+        run: make plugin-dist VERSION="$TAG" PLUGIN_FRONTEND_FLAGS=--check
+      - uses: actions/upload-artifact@v7
+        with:
+          name: plugin
+          path: dist/parkana-sql-datasource-*.zip
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    needs: [parkana, plugin]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: SHA256SUMS
+        working-directory: dist
+        run: |
+          find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort | xargs sha256sum > "$RUNNER_TEMP/SHA256SUMS"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          cat SHA256SUMS
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if out=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>&1); then
+            if [ "$out" != true ]; then
+              echo "::error::release $TAG is already published; this workflow only touches drafts"
+              exit 1
+            fi
+            gh release upload "$TAG" dist/* --clobber
+            echo "updated the draft release $TAG"
+          elif printf '%s' "$out" | grep -q 'release not found'; then
+            gh release create "$TAG" dist/* --draft --verify-tag \
+              --title "Parkana ${TAG#v}" \
+              --notes "Draft built by the release workflow from $TAG. The changes are in CHANGELOG.md."
+            echo "created the draft release $TAG"
+          else
+            printf '%s\n' "$out" >&2
+            exit 1
+          fi

@@ -83,11 +83,11 @@ own queue, so a slow store cannot silently change the other branch's payload.
 
 There are two different checks, and the script keeps them separate:
 
-1. **Process readiness:** `GET /ready` on Parkana, `GET /ready` on Loki,
+1. Process readiness checks `GET /ready` on Parkana, `GET /ready` on Loki,
    `GET /-/ready` on Alloy, plus the pinned Loki version from
    `/loki/api/v1/status/buildinfo`.
-2. **OTLP route readiness:** an empty OTLP `ExportLogsServiceRequest` is posted
-   as `Content-Type: application/x-protobuf` with an empty body. A 2xx proves
+2. OTLP route readiness posts an empty OTLP `ExportLogsServiceRequest` as
+   `Content-Type: application/x-protobuf` with an empty body. A 2xx proves
    the native route is mounted and the decoder accepts a well-formed request
    without writing an entry. This is the same probe `otlpcompare send` performs
    through `-ready-timeout 30s`; the script runs it against Alloy,
@@ -120,14 +120,14 @@ run instead of being mistaken for "no data yet".
 `otlp.loki.yaml` intentionally differs from the base development Loki config
 in two ways:
 
-1. **Service-name discovery uses the upstream default list.** The base config
+1. Service-name discovery uses the upstream default list. The base config
    sets an empty list. The default list is in
    [`pkg/validation/limits.go:329` @ v3.7.9](https://github.com/grafana/loki/blob/v3.7.9/pkg/validation/limits.go#L329):
    `service`, `app`, `application`, `app_name`, `name`,
    `app_kubernetes_io_name`, `container`, `container_name`,
    `k8s_container_name`, `component`, `workload`, `job`, `k8s_job_name`; when
    none is present the stream gets `service_name="unknown_service"`.
-2. **`distributor.otlp_config` is not set**, so Loki uses the default OTLP
+2. `distributor.otlp_config` is not set, so Loki uses the default OTLP
    mapping. The 18 default resource attributes that become index labels are
    listed in
    [`pkg/loghttp/push/otlp_config.go:56` @ v3.7.9](https://github.com/grafana/loki/blob/v3.7.9/pkg/loghttp/push/otlp_config.go#L56)
@@ -217,15 +217,15 @@ collide and every compare asserts exact entry counts on **both** stores.
 
 Two fixture groups are mandatory gates:
 
-* **Native discovery:** `service-present` supplies `service.name`;
+* In the native discovery group, `service-present` supplies `service.name`;
   `service-empty` and `service-missing` must fall back to `unknown_service`;
   `service-discovered` must map the indexed `container.name` resource
   attribute to `service_name=discovered-container`; `service-missing-job` must
   not discover from `job`, which is structured metadata rather than an index
   label. This is the upstream default behavior the base development config
   suppresses.
-* **Collisions:** `collide.name`/`collide_name`, `http.request.method`/
-  `http_request_method`, and a stream label versus log metadata with the same
+* In the collision group, `collide.name`/`collide_name`,
+  `http.request.method`/`http_request_method`, and a stream label versus log metadata with the same
   normalized name must return real Loki's exact winning value for each
   normalized name. Merely reaching the entry through another contender is not
   equality; a different winner is a failed comparison, not a tolerated

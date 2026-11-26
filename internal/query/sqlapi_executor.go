@@ -18,6 +18,7 @@
 // UUID as canonical text. Instant values outside years 0-9999 (DuckDB
 // infinities and over-range dates) fail as client SQL errors, because RFC 3339
 // cannot carry them.
+
 package query
 
 import (

@@ -132,10 +132,22 @@ type service struct {
 	tailWriteTimeout time.Duration
 	opts             serviceOptions
 	walMax           int64
+	// lastQuarantineSweep is when the last quarantine sweep started; only Run
+	// (before the workers) and the upload loop touch it.
+	lastQuarantineSweep time.Time
 	// walSync is the configured acknowledgment policy. It is resolved at
 	// construction so an invalid mode cannot reach wal.Open.
 	walSync         wal.SyncMode
 	walSyncInterval time.Duration
+
+	// Back-pressure bounds (backpressure.go), resolved at construction.
+	bpMemLimit   int64
+	bpLocalLimit int64
+	bpRetryAfter time.Duration
+	bp           *bpMetrics
+	// localRef publishes the local store, once Run opened it, to the
+	// back-pressure check and the metrics scrape.
+	localRef *atomic.Pointer[LocalStore]
 
 	gate      gate
 	accepting atomic.Bool
@@ -256,6 +268,18 @@ func newService(deps app.Deps, opts serviceOptions) (*service, error) {
 	if err != nil {
 		return nil, err
 	}
+	bpMem, bpLocal, bpRetry := backpressureLimits(cfg.Ingest)
+	// The scrape-time gauges read through localRef, which Run fills in.
+	localRef := &atomic.Pointer[LocalStore]{}
+	bp, err := newBackpressureMetrics(deps.Metrics, mem.Buffered, func() int64 {
+		if ls := localRef.Load(); ls != nil {
+			return ls.UnuploadedBytes()
+		}
+		return 0
+	}, bpMem, bpLocal)
+	if err != nil {
+		return nil, err
+	}
 	s := &service{
 		cfg:              cfg,
 		log:              deps.Logger,
@@ -269,6 +293,11 @@ func newService(deps app.Deps, opts serviceOptions) (*service, error) {
 		walMax:           walMax,
 		walSync:          walSync,
 		walSyncInterval:  walSyncInterval,
+		bpMemLimit:       bpMem,
+		bpLocalLimit:     bpLocal,
+		bpRetryAfter:     bpRetry,
+		bp:               bp,
+		localRef:         localRef,
 		gate:             newGate(),
 		tenants:          make(map[tenant.ID]*tenantState),
 		taken:            make(map[tenant.ID][]*Generation),
@@ -380,6 +409,9 @@ func validateIngest(c config.Ingest) error {
 			errs = append(errs, fmt.Errorf("ingest: %s must be positive", name))
 		}
 	}
+	if c.QuarantineRetention < 0 {
+		errs = append(errs, errors.New("ingest: -ingest.quarantine-retention must not be negative"))
+	}
 	if c.UploadMinBytes <= 0 || c.UploadMergeMax <= 0 {
 		errs = append(errs, errors.New("ingest: -ingest.upload-min and -ingest.upload-merge-max must be positive"))
 	} else if c.UploadMinBytes > c.UploadMergeMax {
@@ -389,6 +421,11 @@ func validateIngest(c config.Ingest) error {
 	// count is rejected.
 	if c.FlushConcurrency < 0 || c.FlushConcurrency > maxFlushConcurrency {
 		errs = append(errs, fmt.Errorf("ingest: -ingest.flush-concurrency must be between 1 and %d, got %d", maxFlushConcurrency, c.FlushConcurrency))
+	}
+	if c.MaxUnuploaded < 0 {
+		errs = append(errs, errors.New("ingest: -ingest.max-unuploaded must not be negative"))
+	} else if c.MaxUnuploaded > 0 && c.MaxUnuploaded < c.UploadMergeMax {
+		errs = append(errs, errors.New("ingest: -ingest.max-unuploaded must be at least -ingest.upload-merge-max, or 0 for the default"))
 	}
 	if c.UploadConcurrency < 0 || c.UploadConcurrency > uploadMaxConcurrency {
 		errs = append(errs, fmt.Errorf("ingest: -ingest.upload-concurrency must be between 1 and %d, got %d", uploadMaxConcurrency, c.UploadConcurrency))
@@ -623,6 +660,7 @@ func (s *service) Run(ctx context.Context) (retErr error) {
 	}
 	s.wal = w
 	s.local = ls
+	s.localRef.Store(ls)
 	// The flusher is built before replay so auto-sealed replay generations
 	// publish during iteration instead of accumulating in memory.
 	if s.flusher, err = s.opts.newFlusher(ls); err != nil {
@@ -639,6 +677,7 @@ func (s *service) Run(ctx context.Context) (retErr error) {
 	if err := s.refreshRotations(ctx); err != nil {
 		return err
 	}
+	s.sweepQuarantine(ctx)
 	s.runCtx = ctx
 	running = true
 	s.startAccepting()
@@ -818,7 +857,8 @@ func (s *service) state(id tenant.ID) *tenantState {
 // append is the push handler's AppendFunc: it prepares and encodes outside the
 // tenant lock, serializes WAL enqueue with memtable admission inside it, and
 // waits outside the lock for the configured acknowledgment: the durable
-// receipt in SyncAlways mode, the write receipt in SyncInterval mode.
+// receipt in SyncAlways mode, the write receipt in SyncInterval mode. A push
+// without entries returns nil and writes nothing.
 func (s *service) append(ctx context.Context, id tenant.ID, req *logs.PushRequest) error {
 	if !s.gate.enter() {
 		return ErrUnavailable
@@ -826,6 +866,14 @@ func (s *service) append(ctx context.Context, id tenant.ID, req *logs.PushReques
 	defer s.gate.leave()
 	if s.failed.Load() {
 		return ErrUnavailable
+	}
+	if req.Entries() == 0 {
+		// Nothing to store: no WAL record, so no sequence to account for.
+		return nil
+	}
+	// Refuse before anything reaches the WAL; replay never passes here.
+	if err := s.checkBackpressure(); err != nil {
+		return err
 	}
 	tctx := tenant.With(ctx, id)
 	prepared, err := s.mem.Prepare(tctx, id, req)
@@ -1221,6 +1269,7 @@ func (s *service) uploadLoop(ctx context.Context) {
 		case <-t.C:
 			report, err := s.uploader.RunOnce(ctx)
 			s.m.uploaded(report, err == nil)
+			s.quarantineTick(ctx)
 			// A rotation may commit before the pass fails on its Put or
 			// catalog update, so the totals refresh after every pass,
 			// failures included.

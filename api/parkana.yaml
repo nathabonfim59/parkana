@@ -1,0 +1,3042 @@
+# Parkana HTTP API. Every route the all-in-one process registers is here,
+# and cmd/parkana/routes_test.go fails when this file and the registered
+# routes drift apart.
+openapi: 3.1.0
+info:
+  title: Parkana HTTP API
+  version: 1.2.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    Parkana serves every route from one HTTP server; `-roles` decides which
+    handlers are real in a process. A Loki route whose role does not run in the
+    process answers 501. The Parkana routes (`/api/v1/sql`, `/api/v1/pipelines`,
+    `/internal/ingest/tail`) are not registered without their role and answer
+    404.
+
+    Every request passes the tenant middleware first (see the `X-Scope-OrgID`
+    parameter). Errors are one line of plain text, as Loki writes them. A path
+    no route serves answers 404 and a method a path does not serve answers 405,
+    both with the plain-text bodies of Go's `http.ServeMux`. A GET route also
+    answers HEAD. A handler panic answers 500 with the body `internal error`.
+servers:
+  - url: http://localhost:3100
+tags:
+  - name: Push
+    description: Write log entries, in the Loki push format or as OTLP logs.
+  - name: Query
+    description: Run LogQL queries, instant or over a time range.
+  - name: Metadata
+    description: List labels, label values and series, and read index statistics and volumes.
+  - name: Tail
+    description: Stream new entries over a WebSocket as they arrive.
+  - name: SQL
+    description: Run sandboxed read-only SQL over stored log rows.
+  - name: Pipelines
+    description: Manage ingest and read pipelines, and dry-run a candidate.
+  - name: Operations
+    description: Readiness, Prometheus metrics and build information.
+  - name: Internal
+    description: Routes between Parkana roles. They are not a public API.
+paths:
+  /ready:
+    get:
+      operationId: ready
+      tags: [Operations]
+      summary: Report whether the process is ready
+      description: |
+        Answers 200 with the body `ready` once the HTTP server is serving and
+        every registered readiness check passes. The ingester registers the
+        `ingest` check, which fails while the ingester replays its WAL, while
+        it shuts down and after a fatal error. Use it as a readiness probe,
+        not a liveness probe.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: The process is ready. The body is `ready` and a newline.
+          content:
+            text/plain; charset=utf-8:
+              schema:
+                type: string
+              example: "ready\n"
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The `X-Scope-OrgID` header names an invalid or disallowed tenant.
+        '503':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The server is not serving yet (`not serving yet`), or a readiness
+            check failed. The body then names the check and its error, as in
+            `ingest: ingest: replaying WAL or shutting down` or
+            `ingest: ingest: failed`.
+  /metrics:
+    get:
+      operationId: metrics
+      tags: [Operations]
+      summary: Expose Prometheus metrics
+      description: |
+        Serves every registered collector in the Prometheus exposition format:
+        the metrics listed in the operations guide plus the Go runtime (`go_`)
+        and process (`process_`) collectors. The format follows the
+        scraper's `Accept` header, as the Prometheus client library negotiates it;
+        without one it is the text format shown here.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: The metrics.
+          content:
+            text/plain; version=0.0.4; charset=utf-8; escaping=underscores:
+              schema:
+                type: string
+              example: |
+                # HELP parkana_http_requests_total HTTP requests by route pattern and status code.
+                # TYPE parkana_http_requests_total counter
+                parkana_http_requests_total{code="200",route="GET /ready"} 1
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The `X-Scope-OrgID` header names an invalid or disallowed tenant.
+  /loki/api/v1/status/buildinfo:
+    get:
+      operationId: buildInfo
+      tags: [Operations]
+      summary: Report build information in Loki's format
+      description: |
+        Returns Loki's buildinfo object. Grafana probes this route and enables
+        features by `version`, so `version` is the Loki version Parkana is
+        compatible with, not Parkana's own. Parkana's version is in
+        `parkanaVersion`. Every process serves this route, whatever its roles.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: The build information.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BuildInfo'
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The `X-Scope-OrgID` header names an invalid or disallowed tenant.
+
+  /loki/api/v1/push:
+    post:
+      operationId: pushLogs
+      summary: Push log entries in the Loki format
+      tags: [Push]
+      description: |
+        Accepts a Loki push request, validates the whole request, applies the ingest
+        pipelines and records the entries for the tenant. The ingester answers 204 only
+        after the configured acknowledgment point: in `-wal.sync` always mode after the
+        WAL record is fsynced and admitted to the memtable, in interval mode after the
+        WAL write and memtable admission. Any validation error rejects the whole
+        request; nothing from a rejected request is stored.
+
+        **Body formats.** The server picks the decoder from the media type of
+        `Content-Type` (parameters such as `charset` are ignored):
+
+        - `application/json` is the Loki JSON push format.
+        - Every other parseable media type, normally `application/x-protobuf`, is a
+          `logproto.PushRequest` protobuf message compressed with the snappy block
+          format (not the framed format). The body is always snappy-decoded on this
+          path, whatever `Content-Encoding` says.
+        - A missing or unparseable `Content-Type` returns 400.
+
+        **Content encodings.** `Content-Encoding` may be empty, `identity`, `snappy`
+        or `gzip` (exact, case-sensitive values). `gzip` is expanded before the body
+        is decoded, so a gzip-wrapped snappy protobuf body and gzip JSON both work.
+        `snappy` is accepted only as a label for the protobuf snappy block that the
+        protobuf path always decodes; it does not decompress a JSON body. Any other
+        value, including lists such as `gzip, snappy`, returns 400.
+
+        **Limits.** `-ingest.max-request-size` (default 16 MiB,
+        `PARKANA_INGEST_MAX_REQUEST_SIZE`) bounds the received body, the
+        gzip-expanded body and the snappy-decoded message separately; exceeding any
+        of them returns 400, not 413. `-ingest.max-line-size` (default 256 KiB,
+        `PARKANA_INGEST_MAX_LINE_SIZE`) bounds the byte length of every log line.
+        There is no separate count or size limit for labels or structured metadata
+        beyond the request size.
+
+        **Labels and structured metadata.** Label and metadata names must match
+        `[a-zA-Z_][a-zA-Z0-9_]*` and be unique within their set. Values can be any
+        string, including the empty string. An empty stream label set `{}` is
+        accepted. In protobuf bodies the stream labels are a selector string such as
+        `{job="api", host="web-1.example.com"}` that allows only the `=` operator;
+        values are double-quoted with Go escapes or backquoted raw strings.
+
+        **Timestamps.** JSON timestamps are strings holding Unix nanoseconds, or RFC
+        3339 with an optional fraction. Protobuf timestamps are
+        `google.protobuf.Timestamp` values between year 1 and year 9999, and every
+        entry must carry one. Old, future and out-of-order timestamps are not
+        rejected. Storage keeps microsecond precision, so nanoseconds are truncated.
+
+        **Empty requests.** As in Loki, a request without streams (`{"streams":[]}`,
+        `{}` or a protobuf message with no streams) answers 422 (new in 1.2.0). A
+        request whose streams carry no entries, as sent or after the ingest pipelines
+        run, answers 204, and nothing is stored or written to the WAL. The labels of
+        streams without entries are still validated, so invalid ones answer 400.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: Content-Encoding
+          in: header
+          required: false
+          description: |
+            Optional body encoding: empty, `identity`, `snappy` or `gzip`. `snappy`
+            changes nothing; the protobuf body is always a snappy block. Any other
+            value returns 400.
+          schema:
+            type: string
+            enum: [identity, snappy, gzip]
+      requestBody:
+        required: true
+        description: |
+          A Loki push request. Use `application/json` for the JSON format. Any other
+          parseable media type is decoded as a snappy block-compressed protobuf
+          message.
+        content:
+          application/x-protobuf:
+            schema:
+              $ref: '#/components/schemas/PushRequestProtobuf'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PushRequestJSON'
+            example:
+              streams:
+                - stream:
+                    job: api
+                    host: web-1.example.com
+                  values:
+                    - ["1700000000000000000", "GET /index.html 200"]
+                    - ["1700000000500000000", "GET /missing 404", {trace_id: "0af7651916cd43dd8448eb211c80319c"}]
+      responses:
+        '204':
+          description: The push was accepted and reached the acknowledgment point. The body is empty.
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The request was rejected and nothing was stored. Causes: missing or
+            unparseable `Content-Type`; unsupported `Content-Encoding`; a body,
+            gzip expansion or snappy expansion larger than
+            `-ingest.max-request-size`; an error while reading the body; malformed
+            gzip, snappy, protobuf or JSON data (including duplicate JSON member
+            names); a JSON value tuple that is not 2 or
+            3 elements, a non-string timestamp or line, a null label value or a
+            metadata element that is not an object; a timestamp that is neither
+            nanoseconds nor RFC 3339, or a protobuf timestamp that is missing or out
+            of range; an invalid or duplicate label or structured metadata name; a protobuf label string that is not a `=`-only selector; a line
+            longer than `-ingest.max-line-size`; an ingest pipeline that rejected
+            the data; or a pipeline result that fails the same validation
+            (message prefixed `ingest: transformed push is invalid:`).
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The `X-Scope-OrgID` header could not be resolved to a tenant. The tenant
+            middleware writes this with `http.Error`, which produces the same
+            `text/plain; charset=utf-8` one-line body.
+        '422':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The request has no streams (new in 1.2.0). The body is Loki's
+            `error at least one valid stream is required for ingestion`. Nothing is
+            stored.
+        '429':
+          $ref: '#/components/responses/Backpressure'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            A server fault. The body is `ingest: push transform failed` when an
+            ingest pipeline failed for a reason other than the data, or
+            `ingest: failed to persist push` when the WAL or memtable could not
+            record the request.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the ingester role, so the route is a placeholder.
+        '503':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The ingester is not accepting pushes: it is still replaying its WAL, it
+            is shutting down, it has stopped after a fatal error, or the shutdown
+            deadline expired while the push waited for its acknowledgment. The body
+            is `ingest: not accepting pushes`. Retry later.
+
+  /v1/logs:
+    post:
+      operationId: pushOTLPLogs
+      summary: Push logs in the OTLP/HTTP format
+      tags: [Push]
+      description: |
+        Accepts an OpenTelemetry `ExportLogsServiceRequest` over OTLP/HTTP and stores
+        it through the same validation, limits, ingest pipelines and acknowledgment
+        path as `POST /loki/api/v1/push`. The conversion follows Loki 3.7.9 with
+        its default OTLP settings, which cannot be configured here.
+
+        **Body formats.** `Content-Type` must have the media type
+        `application/x-protobuf` (binary protobuf) or `application/json` (OTLP
+        JSON); parameters such as `charset` are ignored. Any other media type,
+        including `application/protobuf`, or a missing `Content-Type`, returns
+        400. Unlike the Loki push endpoint, the body is never snappy-compressed.
+
+        **Content encodings.** `Content-Encoding` may be empty, `identity` or
+        `gzip`. Any other value, including `snappy`, `zstd`, `lz4` and `deflate`,
+        returns 400.
+
+        **Limits.** `-ingest.max-request-size` (default 16 MiB) bounds the received
+        body and the gzip-expanded body. `-ingest.max-line-size` (default 256 KiB)
+        bounds each log line.
+
+        **Mapping.**
+
+        - These resource attributes become stream labels, with names normalized
+          (for example `service.name` becomes `service_name`): `service.name`,
+          `service.namespace`, `service.instance.id`, `deployment.environment`,
+          `deployment.environment.name`, `cloud.region`,
+          `cloud.availability_zone`, `k8s.cluster.name`, `k8s.namespace.name`,
+          `k8s.pod.name`, `k8s.container.name`, `container.name`,
+          `k8s.replicaset.name`, `k8s.deployment.name`, `k8s.statefulset.name`,
+          `k8s.daemonset.name`, `k8s.cronjob.name` and `k8s.job.name`.
+        - When `service.name` is missing or empty, `service_name` comes from the
+          first indexed attribute whose normalized name is one of `service`, `app`,
+          `application`, `app_name`, `name`, `app_kubernetes_io_name`,
+          `container`, `container_name`, `k8s_container_name`, `component`,
+          `workload`, `job` or `k8s_job_name`; otherwise it is `unknown_service`.
+        - Every other resource attribute and every scope and log record attribute
+          becomes structured metadata. Map values are flattened with `_`-joined
+          names. Log record fields add `severity_number`, `severity_text`,
+          `observed_timestamp` (only when both timestamps are set),
+          `dropped_attributes_count`, `flags`, `trace_id` and `span_id` (hex), and
+          the scope adds `scope_name`, `scope_version` and
+          `scope_dropped_attributes_count`, each only when set.
+        - Attribute names are normalized like Prometheus `otlptranslator`: every
+          character outside `[A-Za-z0-9]` becomes `_`, runs of `_` collapse, a
+          leading digit gets the prefix `key_`, and `__x__` keeps its double
+          underscores. An empty name, or one that normalizes to only underscores,
+          returns 400.
+        - The log line is the record body rendered as a string. The entry
+          timestamp is `timeUnixNano`, else `observedTimeUnixNano`, else the time
+          the server received the request.
+
+        **Response.** Success is 204 with an empty body. The server does not
+        return an `ExportLogsServiceResponse` and never reports partial success:
+        a request is stored entirely or rejected entirely. An export with no log
+        records (for example `{}`) is answered with 204 and nothing is stored.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: Content-Encoding
+          in: header
+          required: false
+          description: Optional body encoding, empty, `identity` or `gzip`. Any other value returns 400.
+          schema:
+            type: string
+            enum: [identity, gzip]
+      requestBody:
+        required: true
+        content:
+          application/x-protobuf:
+            schema:
+              $ref: '#/components/schemas/OTLPExportLogsRequestProtobuf'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OTLPExportLogsRequestJSON'
+            example:
+              resourceLogs:
+                - resource:
+                    attributes:
+                      - key: service.name
+                        value: {stringValue: checkout}
+                      - key: host.name
+                        value: {stringValue: web-1.example.com}
+                  scopeLogs:
+                    - scope: {name: example-logger, version: "1.0.0"}
+                      logRecords:
+                        - timeUnixNano: "1700000000000000000"
+                          severityNumber: 9
+                          severityText: INFO
+                          body: {stringValue: "order placed"}
+                          attributes:
+                            - key: client.address
+                              value: {stringValue: 203.0.113.10}
+      responses:
+        '204':
+          description: The export was accepted and reached the acknowledgment point, or it held no log records. The body is empty.
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The request was rejected and nothing was stored. Causes: missing,
+            unparseable or unsupported `Content-Type`; unsupported
+            `Content-Encoding`; a body or gzip expansion larger than
+            `-ingest.max-request-size`; an error while reading the body; malformed
+            gzip, protobuf or OTLP JSON data; an attribute name that is empty or
+            normalizes to only underscores; a line longer than
+            `-ingest.max-line-size`; an ingest pipeline that rejected the data; or
+            a pipeline result that fails validation.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The `X-Scope-OrgID` header could not be resolved to a tenant (written with `http.Error`, same plain-text format).
+        '429':
+          $ref: '#/components/responses/Backpressure'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            A server fault. The body is `ingest: push transform failed` or
+            `ingest: failed to persist push`, as for the Loki push endpoint.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the ingester role, so the route is a placeholder.
+        '503':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The ingester is replaying its WAL, shutting down or stopped after a
+            fatal error. The body is `ingest: not accepting pushes`.
+
+  /loki/api/v1/tail:
+    get:
+      operationId: tailLogs
+      summary: Stream new log entries over a WebSocket
+      tags: [Tail]
+      description: |
+        Opens a live tail. The querier validates the request, then upgrades the
+        connection to a WebSocket (RFC 6455, version 13) and sends entries that
+        match the LogQL log query as they are pushed. The request must carry the
+        WebSocket handshake headers (`Connection: Upgrade`, `Upgrade: websocket`,
+        `Sec-WebSocket-Version: 13` and a `Sec-WebSocket-Key`). Every origin is
+        accepted, as in Loki.
+
+        **What is streamed.** Only entries acknowledged by an ingester after the
+        subscription started are sent. There is no historical backfill: `start`
+        only filters incoming entries. The querier subscribes to every ingester in
+        `-tail.ingester-urls`, or to this process over loopback when it also runs
+        the ingester role, and runs the query's full LogQL pipeline on each entry.
+
+        **Messages.** Each server message is a text frame holding one
+        `TailFrame` JSON object (see `x-websocket-message`). A frame holds at most
+        `limit` entries and at most 4 MiB of JSON; larger batches are split into
+        several frames and the connection stays open. Timestamps are Unix
+        nanosecond strings with microsecond precision. Without the
+        `categorize-labels` flag, structured metadata and parsed labels are merged
+        into each stream's labels (parsed labels win over metadata, which wins
+        over stream labels). With the flag, each value is a three-element tuple
+        and those labels are removed from `stream`.
+
+        **Loss and close codes.** The server pings the client every second and
+        drops the connection when a ping is not answered within 5 seconds or a
+        write blocks for 10 seconds. When the querier's per-connection buffer
+        (`-tail.buffer-entries`, default 1024) overflows, the lost entries are
+        described in `dropped_entries`. The server closes the WebSocket with:
+
+        - 1011 (internal error) when an ingester fails, returns an HTTP error,
+          breaks the wire protocol, drops entries for a slow subscriber or closes
+          its stream; when not every ingester acknowledges the subscription
+          within 10 seconds; when one entry does not fit in a 4 MiB frame; when
+          more than 1000 dropped entries are waiting to be described; or when a
+          write fails. The close reason (at most 123 bytes) says which.
+        - 1001 (going away) when the service shuts down.
+
+        When the client goes away the server closes without a close frame.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - name: query
+          in: query
+          required: true
+          description: A LogQL log query, for example `{job="api"} |= "error"`. Metric queries return 400.
+          schema:
+            type: string
+          example: '{job="api"} |= "error"'
+        - name: limit
+          in: query
+          required: false
+          description: |
+            Most entries in one WebSocket message. It must be a positive integer no
+            larger than `-logql.max-entries` (default 5000). It does not end the
+            stream.
+          schema:
+            type: integer
+            minimum: 1
+            default: 100
+        - name: delay_for
+          in: query
+          required: false
+          description: |
+            Whole seconds to hold each entry back after its timestamp, so entries
+            from several ingesters can be sent in timestamp order.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 5
+            default: 0
+        - name: start
+          in: query
+          required: false
+          description: |
+            Drop incoming entries older than this time. Accepts Unix seconds with a
+            decimal fraction (rounded to milliseconds), an integer of up to 10
+            digits (Unix seconds), a longer integer (Unix nanoseconds) or RFC 3339.
+            When absent, nothing is filtered.
+          schema:
+            type: string
+          example: '1700000000'
+        - name: X-Loki-Response-Encoding-Flags
+          in: header
+          required: false
+          description: |
+            Comma-separated flags. `categorize-labels` keeps structured metadata and
+            parsed labels apart in a third tuple element instead of merging them
+            into the stream labels.
+          schema:
+            type: string
+          example: categorize-labels
+      responses:
+        '101':
+          description: |
+            The connection switched to the WebSocket protocol. The server then sends
+            `TailFrame` messages as text frames until one side closes.
+          headers:
+            Upgrade:
+              schema: {type: string, const: websocket}
+            Connection:
+              schema: {type: string, const: Upgrade}
+            Sec-WebSocket-Accept:
+              schema: {type: string}
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The request was rejected before the upgrade. Causes, written by Parkana:
+            a query string that cannot be parsed (`invalid query parameters`);
+            `query`, `limit`, `delay_for` or `start` given more than once; missing
+            or blank `query`; `limit` not an integer or not positive; `limit`
+            above `-logql.max-entries`; `delay_for` not an integer, negative or
+            above 5; an invalid `start`; a LogQL parse error or a metric query.
+            Causes written by the WebSocket library after validation passed, with
+            `http.Error` (same plain-text format): `Sec-WebSocket-Version` is not
+            `13`, or `Sec-WebSocket-Key` is missing, repeated or not a 16-byte
+            base64 value.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The `X-Scope-OrgID` header could not be resolved to a tenant (written with `http.Error`, same plain-text format).
+        '405':
+          description: |
+            The method is not GET. Methods other than GET and HEAD are refused by
+            the router. A HEAD request with valid parameters and the `Connection`
+            and `Upgrade` handshake headers is refused by the WebSocket library
+            (without those headers it gets 426). Both write a plain-text body.
+          content:
+            text/plain; charset=utf-8:
+              schema: {type: string}
+        '426':
+          description: |
+            The parameters are valid but the request is not a WebSocket handshake:
+            `Connection` does not contain `Upgrade`, `Upgrade` does not contain
+            `websocket`, or the request uses HTTP/1.0. Written by the WebSocket
+            library with `http.Error`; the response carries `Connection: Upgrade`
+            and `Upgrade: websocket` (except for the HTTP/1.0 case).
+          headers:
+            Upgrade:
+              schema: {type: string, const: websocket}
+          content:
+            text/plain; charset=utf-8:
+              schema: {type: string}
+              example: "WebSocket protocol violation: Connection header \"\" does not contain Upgrade\n"
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role, so the route is a placeholder.
+        '503':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            Live tail is unavailable: the querier has no ingester URLs (querier-only
+            process without `-tail.ingester-urls`), or the service is shutting down.
+      x-websocket-message:
+        $ref: '#/components/schemas/TailFrame'
+
+  /internal/ingest/tail:
+    get:
+      operationId: ingesterTailSubscribe
+      summary: Subscribe to an ingester's live entries
+      tags: [Internal]
+      x-internal: true
+      description: |
+        The ingester side of live tail. A querier calls this route to receive every
+        entry the ingester acknowledges for the tenant from now on; the querier
+        then applies the LogQL query. It is part of the private protocol between
+        roles and is not a Loki endpoint. It takes no query parameters and has no
+        authentication beyond the tenant header, so do not expose it to clients.
+
+        The response is a stream of newline-delimited JSON (`application/x-ndjson`),
+        one `IngesterTailRecord` per line, flushed as each record is written:
+
+        1. The first record is always `ready`, with the tenant and the
+           subscriber's entry budget (`-tail.buffer-entries`, default 1024). It is
+           sent even while the ingester replays its WAL; the stream then stays
+           empty until the first acknowledged push.
+        2. `batch` records carry the entries of acknowledged pushes in push order.
+           Timestamps are Unix nanosecond strings truncated to microseconds.
+           Labels and metadata are sorted by name. Replayed WAL records are
+           never sent.
+        3. When queued entries would exceed the budget, the subscriber is evicted:
+           the server writes one `dropped` record with the count of lost entries
+           and reason `slow subscriber`, then ends the response.
+
+        The response also ends when the client disconnects, when the ingester
+        shuts down, or when one write blocks for more than 10 seconds.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: The subscription is open. The body is an NDJSON stream of records.
+          headers:
+            Cache-Control:
+              schema: {type: string, const: no-store}
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/IngesterTailRecord'
+              example: |
+                {"type":"ready","tenant":"default","bufferEntries":1024}
+                {"type":"batch","entries":[{"timestamp":"1700000000000000000","line":"GET /index.html 200","labels":[{"name":"host","value":"web-1.example.com"},{"name":"job","value":"api"}]}]}
+                {"type":"dropped","dropped":1500,"reason":"slow subscriber"}
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The `X-Scope-OrgID` header could not be resolved to a tenant (written with `http.Error`, same plain-text format).
+        '404':
+          description: This process does not run the ingester role. The route is not registered, so the router answers with its default plain-text 404.
+          content:
+            text/plain; charset=utf-8:
+              schema: {type: string}
+        '405':
+          description: The method is not GET or HEAD. The router answers with a plain-text 405.
+          content:
+            text/plain; charset=utf-8:
+              schema: {type: string}
+
+
+  /loki/api/v1/query:
+    get:
+      operationId: queryInstant
+      tags: [Query]
+      summary: Run an instant LogQL query
+      description: >-
+        Evaluates a LogQL metric or scalar expression at a single point in
+        time. A metric expression returns a vector and a scalar expression
+        returns a scalar. A log query (a stream selector with an optional
+        pipeline) is rejected with 400, because log queries cannot be instant
+        queries; use `/loki/api/v1/query_range` for them. Parameters that only
+        range queries use (start, end, since, step, interval) are ignored.
+        Read pipelines, when configured, apply to this endpoint. Only data in
+        uploaded Parquet files is visible; lines still held by the ingester
+        are not returned.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QEncodingFlagsHeader'
+        - $ref: '#/components/parameters/QQuery'
+        - $ref: '#/components/parameters/QTime'
+        - $ref: '#/components/parameters/QLimit'
+        - $ref: '#/components/parameters/QDirection'
+      responses:
+        '200':
+          $ref: '#/components/responses/QQueryOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            The request parameters do not parse, the query is empty, the
+            LogQL does not parse, the query is a log query, the LogQL uses a
+            feature Parkana does not support, or a metric query returns more
+            series than the configured maximum (`-logql.max-series`, default
+            500).
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The query failed on the server, or the result could not be encoded.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+    post:
+      operationId: queryInstantPost
+      tags: [Query]
+      summary: Run an instant LogQL query with a form body
+      description: >-
+        Same as `GET /loki/api/v1/query`, with the parameters sent as an
+        `application/x-www-form-urlencoded` body. Parameters in the URL query
+        string are accepted too; when a name appears in both, the body value
+        wins. A body with any other content type is not read, so only the
+        query string counts. The body is limited to 10 MiB.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QEncodingFlagsHeader'
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QInstantQueryForm'
+      responses:
+        '200':
+          $ref: '#/components/responses/QQueryOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            The form body or a parameter does not parse, the query is empty,
+            the LogQL does not parse, the query is a log query, the LogQL uses
+            a feature Parkana does not support, or a metric query returns more
+            series than the configured maximum.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The query failed on the server, or the result could not be encoded.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+  /loki/api/v1/query_range:
+    get:
+      operationId: queryRange
+      tags: [Query]
+      summary: Run a LogQL query over a time range
+      description: >-
+        Runs a LogQL log query or metric query over a time range. A log query
+        returns streams of entries with timestamps in [start, end), at most
+        `limit` entries in total, ordered by `direction`. A metric query
+        returns a matrix with one point per step; `limit` does not apply to
+        it, and the engine aligns start and end to the step grid. A scalar
+        expression returns one matrix series without labels. Read pipelines,
+        when configured, apply to this endpoint. Only data in uploaded
+        Parquet files is visible.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QEncodingFlagsHeader'
+        - $ref: '#/components/parameters/QQuery'
+        - $ref: '#/components/parameters/QStart'
+        - $ref: '#/components/parameters/QEnd'
+        - $ref: '#/components/parameters/QSince'
+        - $ref: '#/components/parameters/QStep'
+        - $ref: '#/components/parameters/QInterval'
+        - $ref: '#/components/parameters/QLimit'
+        - $ref: '#/components/parameters/QDirection'
+      responses:
+        '200':
+          $ref: '#/components/responses/QQueryOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            A parameter does not parse, the query is empty, end is before
+            start, step is zero or negative, (end - start) / step exceeds
+            11000, interval is negative, the LogQL does not parse or uses a
+            feature Parkana does not support, a metric step is below one
+            millisecond, `limit` on a log query exceeds `-logql.max-entries`
+            (default 5000), or a metric query returns more series than
+            `-logql.max-series` (default 500).
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The query failed on the server, or the result could not be encoded.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+    post:
+      operationId: queryRangePost
+      tags: [Query]
+      summary: Run a LogQL range query with a form body
+      description: >-
+        Same as `GET /loki/api/v1/query_range`, with the parameters sent as an
+        `application/x-www-form-urlencoded` body. Parameters in the URL query
+        string are accepted too; when a name appears in both, the body value
+        wins. A body with any other content type is not read. The body is
+        limited to 10 MiB.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QEncodingFlagsHeader'
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QRangeQueryForm'
+      responses:
+        '200':
+          $ref: '#/components/responses/QQueryOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            The form body or a parameter does not parse, the query is empty,
+            end is before start, step is zero or negative or too small for the
+            range, interval is negative, the LogQL does not parse or is not
+            supported, or a configured limit is exceeded.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The query failed on the server, or the result could not be encoded.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+  /loki/api/v1/labels:
+    get:
+      operationId: labelNames
+      tags: [Metadata]
+      summary: List label names
+      description: >-
+        Returns the sorted distinct label names of the streams that have at
+        least one entry in [start, end], both bounds inclusive. The optional
+        `query` selector restricts the streams. An inverted range (end before
+        start) is accepted and returns no names. When no name matches, the
+        response has no `data` field. Read pipelines do not apply.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QSelectorOptional'
+        - $ref: '#/components/parameters/QStart'
+        - $ref: '#/components/parameters/QEnd'
+        - $ref: '#/components/parameters/QSince'
+      responses:
+        '200':
+          $ref: '#/components/responses/QLabelsOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            The parameters do not parse, start, end or since is invalid, or
+            the selector does not parse. A bare `{}` selector is rejected.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+    post:
+      operationId: labelNamesPost
+      tags: [Metadata]
+      summary: List label names with a form body
+      description: >-
+        Same as `GET /loki/api/v1/labels`, with the parameters sent as an
+        `application/x-www-form-urlencoded` body. Query string parameters are
+        accepted too; the body value wins when a name appears in both.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QLabelsForm'
+      responses:
+        '200':
+          $ref: '#/components/responses/QLabelsOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: The form body or a parameter does not parse, or the selector does not parse.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+  /loki/api/v1/label/{name}/values:
+    get:
+      operationId: labelValues
+      tags: [Metadata]
+      summary: List the values of one label
+      description: >-
+        Returns the sorted distinct values of the label `name` across the
+        streams that have at least one entry in [start, end], both bounds
+        inclusive. The optional `query` selector restricts the streams. An
+        inverted range is accepted and returns no values. When no value
+        matches, the response has no `data` field. This route accepts GET
+        only; POST answers 405. Read pipelines do not apply.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QLabelName'
+        - $ref: '#/components/parameters/QSelectorOptional'
+        - $ref: '#/components/parameters/QStart'
+        - $ref: '#/components/parameters/QEnd'
+        - $ref: '#/components/parameters/QSince'
+      responses:
+        '200':
+          $ref: '#/components/responses/QLabelsOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            The parameters do not parse, start, end or since is invalid, or
+            the selector does not parse. A bare `{}` selector is rejected.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+  /loki/api/v1/series:
+    get:
+      operationId: series
+      tags: [Metadata]
+      summary: List the label sets of matching streams
+      description: >-
+        Returns the distinct full label sets of the streams that match any of
+        the selectors in `match[]` or `match` and have at least one entry in
+        [start, end], both bounds inclusive. Both parameter names are read
+        and combined; duplicate selectors count once and the selectors are
+        OR-combined. No selector, or a single `{}`, selects every stream. An
+        inverted range is accepted and returns an empty list. `data` is
+        always an array, empty when nothing matches. Read pipelines do not
+        apply.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QMatchList'
+        - $ref: '#/components/parameters/QMatch'
+        - $ref: '#/components/parameters/QStart'
+        - $ref: '#/components/parameters/QEnd'
+        - $ref: '#/components/parameters/QSince'
+      responses:
+        '200':
+          $ref: '#/components/responses/QSeriesOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            The parameters do not parse, start, end or since is invalid, or a
+            selector does not parse. `{}` combined with other selectors is
+            rejected.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+    post:
+      operationId: seriesPost
+      tags: [Metadata]
+      summary: List the label sets of matching streams with a form body
+      description: >-
+        Same as `GET /loki/api/v1/series`, with the parameters sent as an
+        `application/x-www-form-urlencoded` body. Repeat `match[]` for several
+        selectors. Query string parameters are accepted too and selectors
+        from both places are combined.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/QSeriesForm'
+            encoding:
+              match[]:
+                style: form
+                explode: true
+      responses:
+        '200':
+          $ref: '#/components/responses/QSeriesOK'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: The form body or a parameter does not parse, or a selector does not parse.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+  /loki/api/v1/index/stats:
+    get:
+      operationId: indexStats
+      tags: [Metadata]
+      summary: Count the streams, files, bytes and entries a selector matches
+      description: >-
+        Returns counts for the streams that match the required `query`
+        selector in [start, end]. The bounds are widened to whole
+        milliseconds and both are inclusive. The parameters are validated as
+        for `query_range`, so `step`, `interval`, `limit` and `direction` must
+        be valid even though they do not change the answer. The response has
+        no status envelope. Parkana measures the counts from stored rows:
+        `streams` is the number of distinct label sets, `chunks` the number
+        of Parquet files read, `bytes` the sum of line lengths in bytes, and
+        `entries` the number of matching rows. Read pipelines do not apply.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QSelectorRequired'
+        - $ref: '#/components/parameters/QStart'
+        - $ref: '#/components/parameters/QEnd'
+        - $ref: '#/components/parameters/QSince'
+        - $ref: '#/components/parameters/QStep'
+        - $ref: '#/components/parameters/QInterval'
+        - $ref: '#/components/parameters/QLimit'
+        - $ref: '#/components/parameters/QDirection'
+      responses:
+        '200':
+          description: The counts for the selector and range.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QIndexStatsResponse'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            `query` is missing or does not parse (a bare `{}` is rejected),
+            end is before start, or another range query parameter is invalid.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+  /loki/api/v1/index/volume:
+    get:
+      operationId: indexVolume
+      tags: [Metadata]
+      summary: Sum line bytes per group over a range
+      description: >-
+        Returns the total line bytes over [start, end] for each group of
+        streams that match the required `query` selector, as a vector. A bare
+        `{}` selects every stream. With `aggregateBy=series` (the default) a
+        group is a label set projected onto the selector's label names, or
+        onto `targetLabels` when given. With `aggregateBy=labels` a group is
+        one label name, reported as a metric with that name and an empty
+        value. Groups are sorted by volume, largest first, and at most
+        `limit` are kept. The `time` and `direction` parameters are
+        validated but do not change the answer. The bounds are widened to
+        whole milliseconds and both are inclusive. The `stats` object is
+        always zero. Read pipelines do not apply.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QVolumeSelector'
+        - $ref: '#/components/parameters/QStart'
+        - $ref: '#/components/parameters/QEnd'
+        - $ref: '#/components/parameters/QSince'
+        - $ref: '#/components/parameters/QTime'
+        - $ref: '#/components/parameters/QVolumeLimit'
+        - $ref: '#/components/parameters/QDirection'
+        - $ref: '#/components/parameters/QAggregateBy'
+        - $ref: '#/components/parameters/QTargetLabels'
+      responses:
+        '200':
+          description: The volume per group, as a vector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QVolumeResponse'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            `query` is missing or does not parse, `limit` is negative or not
+            an integer, `aggregateBy` is not `series` or `labels`, end is
+            before start, or `time`, `direction`, start, end or since is
+            invalid.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+  /loki/api/v1/index/volume_range:
+    get:
+      operationId: indexVolumeRange
+      tags: [Metadata]
+      summary: Sum line bytes per group in step buckets
+      description: >-
+        Same grouping as `/loki/api/v1/index/volume`, bucketed by `step`. The
+        answer is a matrix when any group has more than one bucket, and a
+        vector when every group has a single bucket. The step is truncated to
+        whole milliseconds after validation; a step below one millisecond
+        gives one bucket over the whole range. A bucket's timestamp is one
+        millisecond before the next bucket boundary, or the end of the range
+        for the last bucket. `limit` applies per bucket, so a group can be
+        missing from some buckets. The `stats` object is always zero. Read
+        pipelines do not apply.
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/QVolumeSelector'
+        - $ref: '#/components/parameters/QStart'
+        - $ref: '#/components/parameters/QEnd'
+        - $ref: '#/components/parameters/QSince'
+        - $ref: '#/components/parameters/QStep'
+        - $ref: '#/components/parameters/QInterval'
+        - $ref: '#/components/parameters/QVolumeLimit'
+        - $ref: '#/components/parameters/QDirection'
+        - $ref: '#/components/parameters/QAggregateBy'
+        - $ref: '#/components/parameters/QTargetLabels'
+      responses:
+        '200':
+          description: The volume per group and bucket, as a matrix or a vector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QVolumeResponse'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: >-
+            `query` is missing or does not parse, end is before start, step is
+            zero or negative, (end - start) / step exceeds 11000, `limit`,
+            `interval`, `direction` or `aggregateBy` is invalid.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header names an invalid or disallowed tenant.
+        '499':
+          $ref: '#/components/responses/QClientClosed'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: The read failed on the server.
+        '501':
+          $ref: '#/components/responses/LokiError'
+          description: This process does not run the querier role.
+        '503':
+          $ref: '#/components/responses/QShuttingDown'
+        '504':
+          $ref: '#/components/responses/QTimeout'
+
+
+  /api/v1/sql:
+    post:
+      operationId: runSQL
+      summary: Run one read-only SQL query
+      description: |
+        Runs exactly one read-only DuckDB SELECT over the tenant's stored log rows in a
+        per-request sandbox. The route is registered by the querier role and has no
+        separate enable flag: any process that runs the querier role (the default
+        `-roles=all` includes it) serves it. Without the querier role the path is not
+        registered and answers 404.
+
+        Each request builds its own in-memory DuckDB database, materializes the rows of
+        the tenant's catalog files whose `_ts` falls in `[from, to)` into a table named
+        `logs`, then disables file access, extensions and setting changes before the
+        statement is validated and run. The `logs` table has the columns `_ts`
+        (TIMESTAMPTZ), `line` (VARCHAR), `labels` and `meta` (MAP(VARCHAR, VARCHAR)) and
+        one VARCHAR column per promoted label present in the selected files. Rows are the
+        stored rows: no LogQL normalization, no deduplication and no read pipelines.
+        Only data that the ingester has uploaded and cataloged is visible.
+
+        The statement must lead with SELECT or WITH. The only relations it may name are
+        `logs` and CTEs visible at that point. Schema or catalog qualified names, WITH
+        RECURSIVE, bind parameters, more than one statement, and functions that read
+        files or settings (names starting with `duckdb_`, `pragma_`, `sqlite_` or
+        `read_`, plus `current_setting`, `getvariable`, `getenv`, `query`, `query_table`,
+        `json_execute_serialized_sql`, `glob`, `glob_parquet`, `parquet_scan`,
+        `parquet_metadata`, `parquet_schema`, `parquet_kv_metadata` and `sniff_csv`) are
+        rejected with 400.
+
+        Limits come from flags on the querier role, each with a `PARKANA_*` environment
+        fallback: `-sql.max-rows` (default 10000), `-sql.default-limit` (default 1000),
+        `-sql.max-result-bytes` (default 8MiB), `-sql.timeout` (default 30s),
+        `-sql.memory-limit` (default 1GiB per request), `-sql.threads` (default 1) and
+        `-sql.max-concurrent` (default 2). Fixed limits: the request body is at most
+        1 MiB, the SQL text at most 65536 bytes, and the lexical nesting depth at most
+        1000. The SQL deadline starts before the body is read and covers the wait for a
+        concurrency slot, materialization, validation, execution and encoding; the
+        querier's `-querier.timeout` (default 2m) also applies and the sooner deadline
+        wins.
+
+        The server does not check the request Content-Type. Error bodies are one line of
+        plain text and never echo the SQL text, parser detail or file paths. When the
+        body was not fully read, or the request deadline or cancellation has fired, the
+        error response carries `Connection: close`.
+      tags: [SQL]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        description: |
+          A strict JSON object. Unknown members, members set to null, duplicate member
+          names, trailing data after the object and bodies over 1 MiB are rejected with
+          400.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SQLRequest'
+            example:
+              query: "SELECT _ts, line FROM logs ORDER BY _ts DESC"
+              from: "2026-01-01T00:00:00Z"
+              to: "2026-01-01T01:00:00Z"
+              limit: 100
+      responses:
+        '200':
+          description: |
+            The complete result. The body is encoded in full before any byte is sent, so
+            a result over `-sql.max-result-bytes` fails with 400 instead of a partial
+            200.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SQLResponse'
+              example:
+                columns:
+                  - name: _ts
+                    type: time
+                    databaseType: TIMESTAMPTZ
+                  - name: n
+                    type: number
+                    databaseType: BIGINT
+                rows:
+                  - ["2026-01-01T00:00:01.123456Z", 42]
+                truncated: false
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The caller can fix the request. Causes, each with its own fixed text: a
+            malformed request (empty or non-object body, unknown member, null member,
+            missing `query`, `from` or `to`, wrong JSON type, a timestamp that is not
+            RFC3339Nano or is the zero time, `from` not before `to`, `limit` outside 1 to
+            `-sql.max-rows`, body over 1 MiB), with a body that starts with
+            `query: sql api: invalid request:`; SQL text over 65536 bytes or nested deeper
+            than 1000 levels; a statement that is not exactly one read-only SELECT over
+            `logs` or breaks the relation or function policy; WITH RECURSIVE; a statement
+            DuckDB rejects (syntax, binding, types, runtime errors, unsupported result
+            column types, non-finite floats, dates outside years 0 to 9999); a
+            materialization over `-sql.memory-limit`; an encoded result over
+            `-sql.max-result-bytes`.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header is invalid, or names a tenant other than `default` while multi-tenancy is off.
+        '499':
+          $ref: '#/components/responses/LokiError'
+          description: The client canceled the request before its deadline. The body is `the request was cancelled by the client`.
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: 'An internal failure, for example in the catalog, the object cache or the sandbox setup. The body is always `parkana: sql: internal error`; details go to the server log.'
+        '503':
+          $ref: '#/components/responses/LokiError'
+          description: 'The querier is shutting down. The body is `parkana: querier is shutting down`.'
+        '504':
+          $ref: '#/components/responses/LokiError'
+          description: The request deadline expired (`-sql.timeout` or `-querier.timeout`), including while waiting for a concurrency slot or reading a slow request body.
+
+  /api/v1/pipelines:
+    get:
+      operationId: listPipelines
+      summary: List pipelines
+      description: |
+        Returns the tenant's live pipelines of both stages, sorted by name. Deleted
+        pipelines are not listed. The pipeline routes are registered once per process
+        when the ingester or querier role is enabled; there is no separate enable flag.
+      tags: [Pipelines]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: The tenant's pipelines. An empty tenant returns `{"pipelines":[]}`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineList'
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header is invalid, or names a tenant other than `default` while multi-tenancy is off.
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: 'A catalog failure or a stored definition that cannot be decoded. The body is always `pipelineapi: internal error`.'
+    post:
+      operationId: createPipeline
+      summary: Create a pipeline
+      description: |
+        Validates and compiles the definition, then stores it at version 1. The catalog
+        only stores definitions that compile. When the name was deleted before, the new
+        pipeline continues above the deleted version and gets a fresh `created_at`.
+        The server does not check the request Content-Type.
+      tags: [Pipelines]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        description: A pipeline definition. `version` may be omitted or 0; any other value is rejected.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineCreateRequest'
+            example:
+              name: example-redact
+              stage: ingest
+              selector: example-service
+              steps:
+                - type: redact
+                  pattern: "card=[0-9]{12,19}"
+                  replace: "card=***"
+                - type: parse_json
+                - type: promote
+                  from: user_id
+                  to: user_id
+      responses:
+        '201':
+          description: The stored pipeline with its catalog-assigned version and timestamps.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The body is not one JSON object, has unknown, duplicate or null step members
+            or trailing data (text starts with `pipelineapi: invalid definition:`), carries
+            a nonzero `version`, or fails validation or compilation (invalid name, stage or
+            selector, no steps or more than 32, unknown step type, a member the step type
+            does not use, invalid regex or expression, `promote` or `set_stream` at the
+            read stage, reserved names). Compile errors start with `pipeline:`.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header is invalid, or names a tenant other than `default` while multi-tenancy is off.
+        '409':
+          $ref: '#/components/responses/LokiError'
+          description: A live pipeline with this name already exists. Of two concurrent creates for one name, exactly one succeeds.
+        '413':
+          $ref: '#/components/responses/LokiError'
+          description: 'The body is over 1 MiB. The body text is `pipelineapi: request body exceeds the limit (1048576 bytes)`.'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: 'A catalog failure. The body is always `pipelineapi: internal error`.'
+
+  /api/v1/pipelines/{name}:
+    parameters:
+      - $ref: '#/components/parameters/PipelineName'
+    get:
+      operationId: getPipeline
+      summary: Get one pipeline
+      description: |
+        Returns the tenant's live pipeline with this name. A GET on
+        `/api/v1/pipelines/dry-run` reads a pipeline named `dry-run`; only POST on that
+        path runs a dry-run.
+      tags: [Pipelines]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      responses:
+        '200':
+          description: The pipeline.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header is invalid, or names a tenant other than `default` while multi-tenancy is off.
+        '404':
+          $ref: '#/components/responses/LokiError'
+          description: 'No live pipeline has this name (never created, or deleted). The body reads `catalog: file not found: pipeline "<name>"`.'
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: 'A catalog failure or a stored definition that cannot be decoded. The body is always `pipelineapi: internal error`.'
+    put:
+      operationId: replacePipeline
+      summary: Replace a pipeline
+      description: |
+        Replaces the live pipeline with a full new definition. Concurrency control is
+        optimistic and lives in the body: `version` must equal the live version. There
+        is no ETag or If-Match support. On success the version goes up by one and
+        `created_at` is kept. PUT never creates a pipeline. The server does not check the
+        request Content-Type.
+      tags: [Pipelines]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        description: A full definition whose `name` equals the path name, plus the live `version`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineReplaceRequest'
+            example:
+              name: example-redact
+              stage: ingest
+              selector: example-service
+              version: 1
+              steps:
+                - type: redact
+                  pattern: "(?i)card=[0-9]{12,19}"
+                  replace: "card=***"
+      responses:
+        '200':
+          description: The stored pipeline at its new version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pipeline'
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The body is malformed (text starts with `pipelineapi: invalid definition:`),
+            the body name differs from the path name, `version` is missing, zero or
+            negative (`pipelineapi: version must be a positive integer`), or the
+            definition fails validation or compilation.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header is invalid, or names a tenant other than `default` while multi-tenancy is off.
+        '404':
+          $ref: '#/components/responses/LokiError'
+          description: No live pipeline has this name, including a deleted one.
+        '409':
+          $ref: '#/components/responses/LokiError'
+          description: The `version` does not match the live version. The body names the expected and live versions.
+        '413':
+          $ref: '#/components/responses/LokiError'
+          description: The body is over 1 MiB.
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: 'A catalog failure. The body is always `pipelineapi: internal error`.'
+    delete:
+      operationId: deletePipeline
+      summary: Delete a pipeline
+      description: |
+        Deletes the live pipeline. The request needs a JSON body with the live version.
+        The delete is a tombstone: the version goes up by one and is kept, so a later
+        create with the same name starts above it.
+      tags: [Pipelines]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        description: The live version. An empty body is rejected with 400.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineDeleteRequest'
+            example:
+              version: 1
+      responses:
+        '204':
+          description: The pipeline was deleted. The response has no body.
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The body is empty, not one JSON object, or has unknown members (text starts
+            with `pipelineapi: invalid delete body:`), or `version` is missing, zero or
+            negative.
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header is invalid, or names a tenant other than `default` while multi-tenancy is off.
+        '404':
+          $ref: '#/components/responses/LokiError'
+          description: No live pipeline has this name, including one that is already deleted.
+        '409':
+          $ref: '#/components/responses/LokiError'
+          description: The `version` does not match the live version.
+        '413':
+          $ref: '#/components/responses/LokiError'
+          description: The body is over 1 MiB.
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: 'A catalog failure. The body is always `pipelineapi: internal error`.'
+
+  /api/v1/pipelines/dry-run:
+    post:
+      operationId: dryRunPipeline
+      summary: Dry-run an unsaved pipeline
+      description: |
+        Compiles an unsaved candidate exactly as a write would and runs it over sample
+        entries. Nothing is written to the catalog, the WAL or object storage. Each
+        entry's original dataset comes from its own `labels` through the configured
+        `-stream.labels`; an entry whose dataset does not match the selector passes
+        through unchanged. A `keep` data error marks the entry with `pipeline_error` and
+        `pipeline_error_details` metadata, a `drop` removes it, and a `reject` fails the
+        whole request with 400. The server does not check the request Content-Type.
+      tags: [Pipelines]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineDryRunRequest'
+            example:
+              pipeline:
+                name: example-parse
+                stage: ingest
+                selector: example-service
+                steps:
+                  - type: parse_logfmt
+              entries:
+                - line: "user.id=example http-status=200"
+                  labels:
+                    service_name: example-service
+      responses:
+        '200':
+          description: The surviving entries in input order and the number of dropped entries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineDryRunResponse'
+              example:
+                entries:
+                  - line: "user.id=example http-status=200"
+                    labels:
+                      service_name: example-service
+                    meta:
+                      user_id: example
+                      http_status: "200"
+                dropped: 0
+        '400':
+          $ref: '#/components/responses/LokiError'
+          description: |
+            The body is malformed or has unknown members, including `version` inside
+            `pipeline` (text starts with `pipelineapi: invalid dry-run:`); there are more
+            than 1000 entries; an entry has an invalid label or metadata name; an entry
+            timestamp is not RFC3339; the candidate fails validation or compilation; or a
+            step with `on_error: reject` hit a data error (text reads
+            `pipeline <name> rejected at <step>: <details>`).
+        '401':
+          $ref: '#/components/responses/LokiError'
+          description: The X-Scope-OrgID header is invalid, or names a tenant other than `default` while multi-tenancy is off.
+        '413':
+          $ref: '#/components/responses/LokiError'
+          description: The body is over 1 MiB.
+        '500':
+          $ref: '#/components/responses/LokiError'
+          description: 'A failure while applying the pipeline that is not a reject. The body is always `pipelineapi: internal error`.'
+
+components:
+  parameters:
+    TenantHeader:
+      name: X-Scope-OrgID
+      in: header
+      required: false
+      description: |
+        The tenant, as in Loki. Parkana runs single-tenant by default: the
+        header must be absent or `default`, and both select the `default`
+        tenant. Any other valid id answers 401 (`tenant: multi-tenancy is
+        disabled; only the default tenant is accepted`). With `-multi-tenant`
+        (not supported yet) any valid id is accepted. A valid id is 1 to 64
+        characters from `A-Za-z0-9_-`; an invalid one always answers 401.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{1,64}$'
+        default: default
+
+    QEncodingFlagsHeader:
+      name: X-Loki-Response-Encoding-Flags
+      in: header
+      required: false
+      description: >-
+        Comma-separated response encoding flags. The value is split on commas
+        without trimming and duplicates collapse. The flags are echoed, sorted,
+        in `data.encodingFlags`. `categorize-labels` keeps stream labels apart
+        from per-entry structured metadata and parsed labels (see
+        QStreamValue). Unknown flags are echoed and otherwise ignored.
+      schema:
+        type: string
+      example: categorize-labels
+    QQuery:
+      name: query
+      in: query
+      required: true
+      description: >-
+        The LogQL expression. An empty or missing value answers 400 with
+        `plan: invalid params: bad query: empty query`.
+      schema:
+        type: string
+      example: 'sum by (level) (count_over_time({app="example"}[5m]))'
+    QSelectorOptional:
+      name: query
+      in: query
+      required: false
+      description: >-
+        A bare stream selector that restricts the streams read. Pipelines are
+        not allowed. A bare `{}` is rejected. Absent means every stream.
+      schema:
+        type: string
+      example: '{app="example"}'
+    QSelectorRequired:
+      name: query
+      in: query
+      required: true
+      description: >-
+        A bare stream selector. Pipelines are not allowed and a bare `{}` is
+        rejected.
+      schema:
+        type: string
+      example: '{app="example"}'
+    QVolumeSelector:
+      name: query
+      in: query
+      required: true
+      description: >-
+        A bare stream selector. A bare `{}` (spaces ignored) selects every
+        stream. Pipelines are not allowed.
+      schema:
+        type: string
+      example: '{app="example"}'
+    QTime:
+      name: time
+      in: query
+      required: false
+      description: >-
+        The evaluation time of an instant query. Defaults to the time the
+        request is received. See QTimestamp for the accepted formats.
+      schema:
+        $ref: '#/components/schemas/QTimestamp'
+    QStart:
+      name: start
+      in: query
+      required: false
+      description: >-
+        The start of the range. Defaults to the end minus `since`, where an
+        end in the future is first replaced by the request time. An explicit
+        start makes `since` ignored. See QTimestamp for the accepted formats.
+      schema:
+        $ref: '#/components/schemas/QTimestamp'
+    QEnd:
+      name: end
+      in: query
+      required: false
+      description: >-
+        The end of the range. Defaults to the time the request is received.
+        See QTimestamp for the accepted formats.
+      schema:
+        $ref: '#/components/schemas/QTimestamp'
+    QSince:
+      name: since
+      in: query
+      required: false
+      description: >-
+        How far back the default start lies from the end. A Prometheus
+        duration: one or more integer and unit pairs with units `y` (365d),
+        `w`, `d`, `h`, `m`, `s`, `ms` in decreasing order, such as `1h30m`.
+        The bare value `0` is accepted; any other number without a unit is
+        rejected. Defaults to `1h`.
+      schema:
+        type: string
+        default: 1h
+      example: 30m
+    QStep:
+      name: step
+      in: query
+      required: false
+      description: >-
+        The resolution of a range query: a number of seconds (fractions
+        allowed) or a Prometheus duration such as `1m30s`. Defaults to
+        floor((end - start) / 250) whole seconds, at least 1 second. It must
+        be positive, and (end - start) / step must not exceed 11000.
+      schema:
+        type: string
+      example: '60'
+    QInterval:
+      name: interval
+      in: query
+      required: false
+      description: >-
+        Sampling interval for log queries: a number of seconds or a
+        Prometheus duration. An entry is returned only when it lies at least
+        `interval` after the previously returned entry of any stream, in the
+        query direction. Defaults to 0, which turns sampling off. Must not be
+        negative. Metric queries ignore it.
+      schema:
+        type: string
+      example: 30s
+    QLimit:
+      name: limit
+      in: query
+      required: false
+      description: >-
+        The most entries a log query returns in total, a positive integer.
+        Defaults to 100. A value above `-logql.max-entries` (default 5000)
+        answers 400 for log queries. Metric queries ignore it, but it is
+        still validated.
+      schema:
+        type: integer
+        minimum: 1
+        default: 100
+    QVolumeLimit:
+      name: limit
+      in: query
+      required: false
+      description: >-
+        The most groups kept per bucket. Defaults to 100; an explicit `0`
+        also means 100. Negative or non-integer values answer 400.
+      schema:
+        type: integer
+        minimum: 0
+        default: 100
+    QDirection:
+      name: direction
+      in: query
+      required: false
+      description: >-
+        The entry order for log queries: `forward` (oldest first) or
+        `backward` (newest first). The value is case-insensitive, so
+        `Forward` works too. Defaults to `backward`. With a limit, the
+        direction also decides which entries are kept. Any other value
+        answers 400, also on endpoints that do not use it.
+      schema:
+        type: string
+        enum: [forward, backward]
+        default: backward
+    QLabelName:
+      name: name
+      in: path
+      required: true
+      description: The label name whose values are listed.
+      schema:
+        type: string
+      example: app
+    QMatchList:
+      name: match[]
+      in: query
+      required: false
+      description: >-
+        A stream selector. Repeat the parameter for several selectors; they
+        are OR-combined.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+      example: ['{app="example"}']
+    QMatch:
+      name: match
+      in: query
+      required: false
+      description: >-
+        A stream selector, read in addition to `match[]`. Repeat it for
+        several selectors.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+    QAggregateBy:
+      name: aggregateBy
+      in: query
+      required: false
+      description: >-
+        `series` groups by label set (projected onto the selector's label
+        names, or onto `targetLabels`). `labels` groups by label name. Empty
+        means `series`. Any other value answers 400.
+      schema:
+        type: string
+        enum: [series, labels]
+        default: series
+    QTargetLabels:
+      name: targetLabels
+      in: query
+      required: false
+      description: >-
+        Comma-separated label names to group by. The value is split on commas
+        without trimming. Streams must carry every target label the selector
+        does not already name. An empty element, such as from a trailing
+        comma, gives an empty successful result.
+      schema:
+        type: string
+      example: level,env
+
+
+    PipelineName:
+      name: name
+      in: path
+      required: true
+      description: |
+        The pipeline name. Valid names are 1 to 128 bytes of `A-Za-z0-9._-` and not `.`
+        or `..`. GET, PUT and DELETE do not reject other names; they answer 404 when no
+        live pipeline matches.
+      schema:
+        type: string
+      example: example-redact
+  responses:
+    LokiError:
+      description: |
+        A Loki-style error: the status code and a one-line plain-text message
+        followed by a newline. The response also carries
+        `X-Content-Type-Options: nosniff`.
+      content:
+        text/plain; charset=utf-8:
+          schema:
+            type: string
+          example: "parkana: /loki/api/v1/query_range is not implemented yet\n"
+
+    Backpressure:
+      description: |
+        The ingester is behind and refused the push (new in 1.2.0). Nothing is
+        stored. One of two bounds was reached: rows waiting in memory for a local
+        flush (4 x `-ingest.memtable-max`), or local Parquet waiting for upload
+        (`-ingest.max-unuploaded`). The one-line plain-text body names the bound,
+        the bytes waiting and the limit. Retry after `Retry-After` seconds.
+      headers:
+        Retry-After:
+          description: |
+            Seconds to wait before retrying: the longer of
+            `-ingest.flush-interval` and `-ingest.upload-interval`, rounded up
+            (10 at the defaults).
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        text/plain; charset=utf-8:
+          schema:
+            type: string
+          example: "ingest: back-pressure: 17179869200 bytes of local Parquet wait for upload, limit 17179869184 (-ingest.max-unuploaded); retry after 10s\n"
+
+    QQueryOK:
+      description: The query result.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QQueryResponse'
+    QLabelsOK:
+      description: >-
+        The sorted distinct names or values. `data` is omitted when the list
+        is empty.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QLabelsResponse'
+          examples:
+            values:
+              value: {status: success, data: [app, env]}
+            empty:
+              value: {status: success}
+    QSeriesOK:
+      description: The distinct matching label sets.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/QSeriesResponse'
+    QClientClosed:
+      description: >-
+        The client went away before the read finished. The body is the fixed
+        text `the request was cancelled by the client`.
+      content:
+        text/plain; charset=utf-8:
+          schema:
+            type: string
+    QTimeout:
+      description: >-
+        The read ran longer than `-querier.timeout` (default 2m). The body is
+        the fixed text `request timed out, decrease the duration of the
+        request or add more label matchers (prefer exact match over regex
+        match) to reduce the amount of data processed`.
+      content:
+        text/plain; charset=utf-8:
+          schema:
+            type: string
+    QShuttingDown:
+      description: >-
+        The querier is shutting down and admits no new reads. The body is
+        `parkana: querier is shutting down`.
+      content:
+        text/plain; charset=utf-8:
+          schema:
+            type: string
+  schemas:
+    BuildInfo:
+      type: object
+      required: [version, revision, branch, buildUser, buildDate, goVersion, parkanaVersion]
+      properties:
+        version:
+          type: string
+          description: The Loki version Parkana reports to clients, currently `3.0.0`.
+        revision:
+          type: string
+          description: The git revision the binary was built from, empty when unknown.
+        branch:
+          type: string
+          description: The git branch the binary was built from, empty when unknown.
+        buildUser:
+          type: string
+          description: Always empty.
+        buildDate:
+          type: string
+          description: The build date, empty when unknown.
+        goVersion:
+          type: string
+          description: The Go toolchain version.
+        parkanaVersion:
+          type: string
+          description: Parkana's own version, `dev` for an unversioned build.
+      example:
+        version: 3.0.0
+        revision: 0123456789abcdef0123456789abcdef01234567
+        branch: main
+        buildUser: ""
+        buildDate: ""
+        goVersion: go1.27.3
+        parkanaVersion: v1.0.0
+
+    PushRequestJSON:
+      type: object
+      description: |
+        The Loki JSON push body. Unknown members are ignored; duplicate member names
+        are rejected.
+      properties:
+        streams:
+          type: array
+          items:
+            $ref: '#/components/schemas/PushStreamJSON'
+    PushStreamJSON:
+      type: object
+      properties:
+        stream:
+          type: object
+          description: Stream labels. Names must match `[a-zA-Z_][a-zA-Z0-9_]*`; values must be strings (null is rejected).
+          additionalProperties:
+            type: string
+          example: {job: api, host: web-1.example.com}
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/PushValueJSON'
+    PushValueJSON:
+      type: array
+      description: |
+        One entry: `[timestamp, line]` or `[timestamp, line, metadata]`.
+      minItems: 2
+      maxItems: 3
+      prefixItems:
+        - type: string
+          description: Unix nanoseconds as a decimal string, or an RFC 3339 time.
+          example: '1700000000000000000'
+        - type: string
+          description: The log line. Its byte length is limited by `-ingest.max-line-size`.
+        - type: object
+          description: Structured metadata. Names follow the label name rules; values must be strings.
+          additionalProperties:
+            type: string
+    PushRequestProtobuf:
+      type: string
+      format: binary
+      description: |
+        A Loki `logproto.PushRequest` protobuf message (streams = 1; each stream has
+        labels = 1 as a selector string and entries = 2; each entry has timestamp = 1
+        as `google.protobuf.Timestamp`, line = 2 and structuredMetadata = 3 as
+        name/value pairs), compressed with the snappy block format. Unknown fields
+        are skipped.
+    OTLPExportLogsRequestProtobuf:
+      type: string
+      format: binary
+      description: A binary protobuf `opentelemetry.proto.collector.logs.v1.ExportLogsServiceRequest`. Never snappy-compressed.
+    OTLPExportLogsRequestJSON:
+      type: object
+      description: |
+        The OTLP JSON encoding of `ExportLogsServiceRequest`, as decoded by the
+        OpenTelemetry Collector `pdata` library. Only the top-level shape is shown.
+      properties:
+        resourceLogs:
+          type: array
+          items:
+            type: object
+            properties:
+              resource:
+                type: object
+              scopeLogs:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    scope:
+                      type: object
+                    logRecords:
+                      type: array
+                      items:
+                        type: object
+      additionalProperties: true
+    TailFrame:
+      type: object
+      description: |
+        One live-tail WebSocket text message. `streams` is always present and may
+        be empty; `dropped_entries` appears only when entries were dropped. There is
+        no status envelope.
+      required: [streams]
+      properties:
+        streams:
+          type: array
+          items:
+            $ref: '#/components/schemas/TailStream'
+        dropped_entries:
+          type: array
+          description: Entries the querier dropped because its per-connection buffer was full.
+          items:
+            $ref: '#/components/schemas/TailDroppedEntry'
+      example:
+        streams:
+          - stream: {job: api, host: web-1.example.com}
+            values:
+              - ["1700000000000000000", "GET /index.html 200"]
+    TailStream:
+      type: object
+      required: [stream, values]
+      properties:
+        stream:
+          type: object
+          description: The entry's final labels after the LogQL pipeline. It can be an empty object.
+          additionalProperties:
+            type: string
+        values:
+          type: array
+          items:
+            $ref: '#/components/schemas/TailValue'
+    TailValue:
+      type: array
+      description: |
+        `[timestamp, line]`, or `[timestamp, line, categories]` when the request
+        set the `categorize-labels` flag.
+      minItems: 2
+      maxItems: 3
+      prefixItems:
+        - type: string
+          description: Unix nanoseconds as a decimal string, with microsecond precision.
+        - type: string
+          description: The log line after the LogQL pipeline.
+        - type: object
+          description: Present only with `categorize-labels`. Empty categories are omitted.
+          properties:
+            structuredMetadata:
+              type: object
+              additionalProperties: {type: string}
+            parsed:
+              type: object
+              additionalProperties: {type: string}
+    TailDroppedEntry:
+      type: object
+      required: [timestamp]
+      properties:
+        timestamp:
+          type: string
+          description: Unix nanoseconds of the dropped entry as a decimal string.
+        labels:
+          type: object
+          description: The dropped entry's labels. Omitted when the set is empty.
+          additionalProperties:
+            type: string
+    IngesterTailRecord:
+      type: object
+      description: |
+        One NDJSON line of the ingester tail stream. `type` selects the fields:
+        `ready` uses `tenant` and `bufferEntries`, `batch` uses `entries`, and
+        `dropped` uses `dropped` and `reason`. Fields that do not apply are omitted.
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [ready, batch, dropped]
+        tenant:
+          type: string
+          description: The subscribed tenant (`ready` only).
+        bufferEntries:
+          type: integer
+          description: Most entries queued for this subscriber before it is evicted (`ready` only).
+        entries:
+          type: array
+          description: Entries of acknowledged pushes, in push order (`batch` only).
+          items:
+            $ref: '#/components/schemas/IngesterTailEntry'
+        dropped:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Count of entries lost by the eviction (`dropped` only). It carries no descriptors.
+        reason:
+          type: string
+          description: Why entries were dropped (`dropped` only). Currently always `slow subscriber`.
+    IngesterTailEntry:
+      type: object
+      required: [timestamp, line, labels]
+      properties:
+        timestamp:
+          type: string
+          description: Unix nanoseconds as a decimal string, truncated to microseconds.
+        line:
+          type: string
+        labels:
+          type: array
+          description: Stream labels sorted by name.
+          items:
+            $ref: '#/components/schemas/IngesterTailLabel'
+        metadata:
+          type: array
+          description: Structured metadata sorted by name. Omitted when empty.
+          items:
+            $ref: '#/components/schemas/IngesterTailLabel'
+    IngesterTailLabel:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+
+    QTimestamp:
+      type: string
+      description: >-
+        A point in time. Accepted forms: an integer of at most 10 characters
+        (sign included) is Unix seconds; a longer integer is Unix
+        nanoseconds; a decimal number with a fraction or exponent and a dot,
+        such as `1700000000.5` or `1.7e9`, is Unix seconds, kept exactly to
+        the nanosecond; anything else must be RFC 3339 with optional
+        fractional seconds. Hexadecimal numbers and an exponent without a dot,
+        such as `1e9`, are rejected.
+      examples: ['1700000000', '1700000000000000000', '1700000000.5', '2026-01-02T15:04:05Z']
+
+    QInstantQueryForm:
+      type: object
+      description: Form fields of `POST /loki/api/v1/query`. They match the GET query parameters.
+      required: [query]
+      properties:
+        query: {type: string, description: The LogQL expression.}
+        time: {$ref: '#/components/schemas/QTimestamp'}
+        limit: {type: integer, minimum: 1, default: 100}
+        direction: {type: string, enum: [forward, backward], default: backward}
+
+    QRangeQueryForm:
+      type: object
+      description: Form fields of `POST /loki/api/v1/query_range`. They match the GET query parameters.
+      required: [query]
+      properties:
+        query: {type: string, description: The LogQL expression.}
+        start: {$ref: '#/components/schemas/QTimestamp'}
+        end: {$ref: '#/components/schemas/QTimestamp'}
+        since: {type: string, default: 1h, description: A Prometheus duration.}
+        step: {type: string, description: Seconds or a Prometheus duration.}
+        interval: {type: string, description: Seconds or a Prometheus duration.}
+        limit: {type: integer, minimum: 1, default: 100}
+        direction: {type: string, enum: [forward, backward], default: backward}
+
+    QLabelsForm:
+      type: object
+      description: Form fields of `POST /loki/api/v1/labels`. They match the GET query parameters.
+      properties:
+        query: {type: string, description: An optional bare stream selector.}
+        start: {$ref: '#/components/schemas/QTimestamp'}
+        end: {$ref: '#/components/schemas/QTimestamp'}
+        since: {type: string, default: 1h, description: A Prometheus duration.}
+
+    QSeriesForm:
+      type: object
+      description: Form fields of `POST /loki/api/v1/series`. They match the GET query parameters.
+      properties:
+        match[]:
+          type: array
+          items: {type: string}
+          description: Stream selectors, OR-combined.
+        match:
+          type: array
+          items: {type: string}
+          description: More stream selectors, read in addition to `match[]`.
+        start: {$ref: '#/components/schemas/QTimestamp'}
+        end: {$ref: '#/components/schemas/QTimestamp'}
+        since: {type: string, default: 1h, description: A Prometheus duration.}
+
+    QLabelMap:
+      type: object
+      description: A label set as name to value.
+      additionalProperties: {type: string}
+
+    QQueryResponse:
+      type: object
+      required: [status, data]
+      properties:
+        status:
+          type: string
+          const: success
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/QStreamsData'
+            - $ref: '#/components/schemas/QVectorData'
+            - $ref: '#/components/schemas/QMatrixData'
+            - $ref: '#/components/schemas/QScalarData'
+          discriminator:
+            propertyName: resultType
+            mapping:
+              streams: '#/components/schemas/QStreamsData'
+              vector: '#/components/schemas/QVectorData'
+              matrix: '#/components/schemas/QMatrixData'
+              scalar: '#/components/schemas/QScalarData'
+
+    QEncodingFlags:
+      type: array
+      description: >-
+        The request's encoding flags, deduplicated and sorted. Present only
+        when the request sent X-Loki-Response-Encoding-Flags.
+      items: {type: string}
+
+    QStreamsData:
+      type: object
+      required: [resultType, result, stats]
+      properties:
+        resultType: {type: string, const: streams}
+        encodingFlags: {$ref: '#/components/schemas/QEncodingFlags'}
+        result:
+          type: array
+          description: Streams sorted by their canonical label string.
+          items: {$ref: '#/components/schemas/QStream'}
+        stats: {$ref: '#/components/schemas/QStats'}
+
+    QStream:
+      type: object
+      required: [stream, values]
+      properties:
+        stream:
+          $ref: '#/components/schemas/QLabelMap'
+          description: >-
+            Without `categorize-labels`, the stream labels merged with the
+            entry's structured metadata and parsed labels (parsed wins over
+            structured metadata, which wins over stream labels); entries are
+            grouped by that merged set. With `categorize-labels`, the stream
+            labels only.
+        values:
+          type: array
+          description: Entries sorted by timestamp in the query direction.
+          items: {$ref: '#/components/schemas/QStreamValue'}
+
+    QStreamValue:
+      type: array
+      description: >-
+        One entry: the timestamp as a string of Unix nanoseconds, the line,
+        and, only with `categorize-labels`, an object with the entry's
+        structured metadata and parsed labels. That third element is always
+        present in categorized mode and is `{}` when both are empty.
+      prefixItems:
+        - type: string
+          description: Unix nanoseconds.
+        - type: string
+          description: The log line.
+        - $ref: '#/components/schemas/QEntryLabels'
+      minItems: 2
+      maxItems: 3
+      example: ['1700000000000000000', 'example line']
+
+    QEntryLabels:
+      type: object
+      properties:
+        structuredMetadata:
+          $ref: '#/components/schemas/QLabelMap'
+          description: Present only when the entry has structured metadata.
+        parsed:
+          $ref: '#/components/schemas/QLabelMap'
+          description: Present only when a parser stage extracted labels.
+
+    QSample:
+      type: array
+      description: >-
+        A sample: the timestamp as a JSON number of Unix seconds, with a
+        fraction only when needed (up to nanosecond precision), and the value
+        as a string. Non-finite values are `NaN`, `+Inf` and `-Inf`.
+      prefixItems:
+        - type: number
+        - type: string
+      minItems: 2
+      maxItems: 2
+      example: [1700000000, '42']
+
+    QVectorSample:
+      type: object
+      required: [metric, value]
+      properties:
+        metric: {$ref: '#/components/schemas/QLabelMap'}
+        value: {$ref: '#/components/schemas/QSample'}
+
+    QMatrixSeries:
+      type: object
+      required: [metric, values]
+      properties:
+        metric: {$ref: '#/components/schemas/QLabelMap'}
+        values:
+          type: array
+          items: {$ref: '#/components/schemas/QSample'}
+
+    QVectorData:
+      type: object
+      required: [resultType, result, stats]
+      properties:
+        resultType: {type: string, const: vector}
+        encodingFlags: {$ref: '#/components/schemas/QEncodingFlags'}
+        result:
+          type: array
+          items: {$ref: '#/components/schemas/QVectorSample'}
+        stats: {$ref: '#/components/schemas/QStats'}
+
+    QMatrixData:
+      type: object
+      required: [resultType, result, stats]
+      properties:
+        resultType: {type: string, const: matrix}
+        encodingFlags: {$ref: '#/components/schemas/QEncodingFlags'}
+        result:
+          type: array
+          items: {$ref: '#/components/schemas/QMatrixSeries'}
+        stats: {$ref: '#/components/schemas/QStats'}
+
+    QScalarData:
+      type: object
+      required: [resultType, result, stats]
+      description: Returned by an instant query whose expression is a scalar, such as `1 + 1`.
+      properties:
+        resultType: {type: string, const: scalar}
+        encodingFlags: {$ref: '#/components/schemas/QEncodingFlags'}
+        result: {$ref: '#/components/schemas/QSample'}
+        stats: {$ref: '#/components/schemas/QStats'}
+
+    QStats:
+      type: object
+      description: >-
+        Loki's statistics object. Parkana fills only `summary.execTime` and
+        `summary.totalEntriesReturned` for query and query_range; every other
+        counter is present and zero. The volume endpoints return this object
+        with every field zero.
+      required: [summary, querier, ingester, cache, index]
+      properties:
+        summary: {$ref: '#/components/schemas/QStatsSummary'}
+        querier: {$ref: '#/components/schemas/QStatsQuerier'}
+        ingester: {$ref: '#/components/schemas/QStatsIngester'}
+        cache: {$ref: '#/components/schemas/QStatsCaches'}
+        index: {$ref: '#/components/schemas/QStatsIndex'}
+
+    QStatsSummary:
+      type: object
+      properties:
+        bytesProcessedPerSecond: {type: integer}
+        linesProcessedPerSecond: {type: integer}
+        totalBytesProcessed: {type: integer}
+        totalLinesProcessed: {type: integer}
+        execTime:
+          type: number
+          description: Wall time of the engine call in seconds.
+        queueTime: {type: number}
+        subqueries: {type: integer}
+        totalEntriesReturned:
+          type: integer
+          description: >-
+            Entries for streams, points for a matrix, samples for a vector,
+            and 1 for a scalar.
+        splits: {type: integer}
+        shards: {type: integer}
+        totalPostFilterLines: {type: integer}
+        totalStructuredMetadataBytesProcessed: {type: integer}
+
+    QStatsQuerier:
+      type: object
+      properties:
+        store: {$ref: '#/components/schemas/QStatsStore'}
+        querierExecTime: {type: number}
+
+    QStatsIngester:
+      type: object
+      description: '`recvWaitTime` is omitted when zero, which it always is.'
+      properties:
+        totalReached: {type: integer}
+        totalChunksMatched: {type: integer}
+        totalBatches: {type: integer}
+        totalLinesSent: {type: integer}
+        store: {$ref: '#/components/schemas/QStatsStore'}
+        recvWaitTime: {type: number}
+
+    QStatsStore:
+      type: object
+      properties:
+        totalChunksRef: {type: integer}
+        totalChunksDownloaded: {type: integer}
+        chunksDownloadTime: {type: integer}
+        queryReferencedStructuredMetadata: {type: boolean}
+        queryUsedV2Engine: {type: boolean}
+        chunk: {$ref: '#/components/schemas/QStatsChunk'}
+        chunkRefsFetchTime: {type: integer}
+        congestionControlLatency: {type: integer}
+        pipelineWrapperFilteredLines: {type: integer}
+        dataobj: {$ref: '#/components/schemas/QStatsDataobj'}
+
+    QStatsChunk:
+      type: object
+      properties:
+        headChunkBytes: {type: integer}
+        headChunkLines: {type: integer}
+        decompressedBytes: {type: integer}
+        decompressedLines: {type: integer}
+        compressedBytes: {type: integer}
+        totalDuplicates: {type: integer}
+        postFilterLines: {type: integer}
+        headChunkStructuredMetadataBytes: {type: integer}
+        decompressedStructuredMetadataBytes: {type: integer}
+
+    QStatsDataobj:
+      type: object
+      properties:
+        prePredicateDecompressedRows: {type: integer}
+        prePredicateDecompressedBytes: {type: integer}
+        prePredicateDecompressedStructuredMetadataBytes: {type: integer}
+        postPredicateRows: {type: integer}
+        postPredicateDecompressedBytes: {type: integer}
+        postPredicateStructuredMetadataBytes: {type: integer}
+        postFilterRows: {type: integer}
+        pagesScanned: {type: integer}
+        pagesDownloaded: {type: integer}
+        pagesDownloadedBytes: {type: integer}
+        pageBatches: {type: integer}
+        totalRowsAvailable: {type: integer}
+        totalPageDownloadTime: {type: integer}
+
+    QStatsCaches:
+      type: object
+      properties:
+        chunk: {$ref: '#/components/schemas/QStatsCache'}
+        index: {$ref: '#/components/schemas/QStatsCache'}
+        result: {$ref: '#/components/schemas/QStatsCache'}
+        statsResult: {$ref: '#/components/schemas/QStatsCache'}
+        volumeResult: {$ref: '#/components/schemas/QStatsCache'}
+        seriesResult: {$ref: '#/components/schemas/QStatsCache'}
+        labelResult: {$ref: '#/components/schemas/QStatsCache'}
+        instantMetricResult: {$ref: '#/components/schemas/QStatsCache'}
+
+    QStatsCache:
+      type: object
+      properties:
+        entriesFound: {type: integer}
+        entriesRequested: {type: integer}
+        entriesStored: {type: integer}
+        bytesReceived: {type: integer}
+        bytesSent: {type: integer}
+        requests: {type: integer}
+        downloadTime: {type: integer}
+        queryLengthServed: {type: integer}
+
+    QStatsIndex:
+      type: object
+      properties:
+        totalChunks: {type: integer}
+        postFilterChunks: {type: integer}
+        shardsDuration: {type: integer}
+        usedBloomFilters: {type: boolean}
+        totalStreams: {type: integer}
+        chunkRefsLookupTime: {type: number}
+        bloomFilterTime: {type: number}
+
+    QLabelsResponse:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, const: success}
+        data:
+          type: array
+          description: Sorted distinct names or values. Omitted when empty.
+          items: {type: string}
+
+    QSeriesResponse:
+      type: object
+      required: [status, data]
+      properties:
+        status: {type: string, const: success}
+        data:
+          type: array
+          description: >-
+            The distinct full label sets, sorted by canonical label string.
+            Empty when nothing matches.
+          items: {$ref: '#/components/schemas/QLabelMap'}
+      example:
+        status: success
+        data:
+          - {app: example, env: dev}
+
+    QIndexStatsResponse:
+      type: object
+      description: Bare counts with no status envelope. All four fields are always present.
+      required: [streams, chunks, bytes, entries]
+      properties:
+        streams:
+          type: integer
+          description: Distinct full label sets with at least one matching entry.
+        chunks:
+          type: integer
+          description: Parquet files the read touched.
+        bytes:
+          type: integer
+          description: Sum of line lengths in bytes.
+        entries:
+          type: integer
+          description: Matching rows.
+      example: {streams: 1, chunks: 1, bytes: 120, entries: 3}
+
+    QVolumeResponse:
+      type: object
+      description: >-
+        The query response envelope with a vector or matrix of volumes. Values
+        are line bytes as strings. `encodingFlags` is never present and
+        `stats` is all zero.
+      required: [status, data]
+      properties:
+        status: {type: string, const: success}
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/QVectorData'
+            - $ref: '#/components/schemas/QMatrixData'
+          discriminator:
+            propertyName: resultType
+            mapping:
+              vector: '#/components/schemas/QVectorData'
+              matrix: '#/components/schemas/QMatrixData'
+
+    SQLRequest:
+      type: object
+      additionalProperties: false
+      required: [query, from, to]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          description: |
+            One SELECT or WITH statement over `logs`. Text that is empty or only
+            whitespace is rejected. The 65536-byte cap counts bytes, and nesting of
+            parentheses, brackets and CASE outside strings and comments may not exceed
+            1000 levels.
+          example: "SELECT count(*) AS n FROM logs"
+        from:
+          type: string
+          format: date-time
+          description: Inclusive lower bound on `_ts` for the rows the query can see, as an RFC3339Nano timestamp. It is converted to UTC. Must be before `to`; the zero time is rejected. Sub-microsecond bounds round up to the next microsecond.
+          example: "2026-01-01T00:00:00Z"
+        to:
+          type: string
+          format: date-time
+          description: Exclusive upper bound on `_ts`, as an RFC3339Nano timestamp. It is converted to UTC.
+          example: "2026-01-01T01:00:00Z"
+        limit:
+          type: integer
+          minimum: 1
+          description: Most rows to return, from 1 to `-sql.max-rows` (default 10000). When omitted, `-sql.default-limit` applies (default 1000). Fractions, strings and null are rejected.
+          example: 100
+
+    SQLColumn:
+      type: object
+      additionalProperties: false
+      required: [name, type, databaseType]
+      properties:
+        name:
+          type: string
+          description: The column name as DuckDB reports it. Names may repeat.
+        type:
+          type: string
+          enum: [time, number, string, boolean, json]
+          description: |
+            How cells of this column are encoded. `time` covers TIMESTAMP, TIMESTAMPTZ,
+            TIMESTAMP_S, TIMESTAMP_MS, TIMESTAMP_NS and DATE. `number` covers every
+            integer, HUGEINT, DECIMAL, FLOAT and DOUBLE type. `string` covers VARCHAR,
+            BLOB, UUID, TIME, TIMETZ and SQLNULL columns. `json` covers MAP, LIST, STRUCT,
+            UNION and INTERVAL.
+        databaseType:
+          type: string
+          description: The DuckDB type name, for example `BIGINT` or `TIMESTAMPTZ`.
+
+    SQLCell:
+      description: |
+        One cell. SQL NULL is JSON null. `time` cells are UTC RFC3339Nano strings.
+        `number` cells are exact JSON number tokens: integers as full decimal digits,
+        DECIMAL as exact decimal text without trailing zeros, FLOAT and DOUBLE as the
+        shortest round-trip form; decode them as arbitrary precision numbers when
+        precision matters. TIME cells are `15:04:05.999999` strings and TIMETZ cells add
+        the offset. BLOB and GEOMETRY cells are standard base64 strings and UUID cells are
+        canonical text. INTERVAL cells are objects with `months`, `days` and `micros`
+        numbers, UNION cells are objects with `tag` and `value`, MAP and STRUCT cells are
+        objects and LIST cells are arrays of cells.
+      type: [string, number, boolean, object, array, 'null']
+
+    SQLResponse:
+      type: object
+      additionalProperties: false
+      required: [columns, rows, truncated]
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/SQLColumn'
+        rows:
+          type: array
+          description: The result rows in query order. Each row has one cell per column, in column order. An empty result is `[]`.
+          items:
+            type: array
+            items:
+              $ref: '#/components/schemas/SQLCell'
+        truncated:
+          type: boolean
+          description: True when the query produced more rows than the limit. The response then holds exactly `limit` rows.
+
+    PipelineStage:
+      type: string
+      enum: [ingest, read]
+      description: |
+        `ingest` runs in the ingester after a push is validated and before the WAL.
+        `read` runs in the querier on rows returned by `query` and `query_range`; it
+        cannot use `promote` or `set_stream`.
+
+    PipelineOnError:
+      type: string
+      enum: [keep, drop, reject]
+      default: keep
+      description: |
+        What a data error in this step does. `keep` restores the entry to its state
+        before the step, sets `pipeline_error` and `pipeline_error_details` metadata and
+        skips the entry's remaining steps. `drop` removes the entry. `reject` fails the
+        whole push, query or dry-run.
+
+    PipelineExpression:
+      type: string
+      maxLength: 4096
+      description: |
+        A bounded expression over `line`, `labels.<name>`, `meta.<name>` and `stream`.
+        Absent labels and metadata read as an empty string. Allowed are comparisons,
+        `&&`, `||`, `and`, `or`, `!`, the ternary operator, arithmetic, string `+`,
+        `contains`, `startsWith`, `endsWith`, `matches` with a literal pattern, `in` with
+        a literal list, and the builtins `len`, `lower`, `upper`, `trim`, `trimPrefix`,
+        `trimSuffix`, `indexOf`, `int`, `float` and `string`. At most 1000 AST nodes.
+
+    PipelineWhen:
+      allOf:
+        - $ref: '#/components/schemas/PipelineExpression'
+      description: A boolean expression evaluated before the step. When false, the step is skipped.
+
+    PipelineMetaName:
+      type: string
+      pattern: '^[A-Za-z_][A-Za-z0-9_]*$'
+      description: A metadata field name.
+
+    PipelineSourceField:
+      type: string
+      description: The source of a parse step. `line` or omitted means the log line; any other value is a metadata field name matching `^[A-Za-z_][A-Za-z0-9_]*$`.
+      default: line
+
+    PipelineStepParseJSON:
+      type: object
+      additionalProperties: false
+      required: [type]
+      description: Parses a JSON object and merges its fields into metadata. Nested objects flatten with `_` between path segments.
+      properties:
+        type: {const: parse_json}
+        from: {$ref: '#/components/schemas/PipelineSourceField'}
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStepParseLogfmt:
+      type: object
+      additionalProperties: false
+      required: [type]
+      description: Parses logfmt `key=value` pairs and merges them into metadata.
+      properties:
+        type: {const: parse_logfmt}
+        from: {$ref: '#/components/schemas/PipelineSourceField'}
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStepRegexExtract:
+      type: object
+      additionalProperties: false
+      required: [type, pattern]
+      description: Applies a Go RE2 pattern and merges the first match's named captures into metadata. No match is a data error.
+      properties:
+        type: {const: regex_extract}
+        pattern:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: A Go RE2 pattern with at least one named group, such as `(?P<user>\w+)`.
+        from: {$ref: '#/components/schemas/PipelineSourceField'}
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStepRename:
+      type: object
+      additionalProperties: false
+      required: [type, from, to]
+      description: Moves one metadata field to another name. A missing source is a no-op.
+      properties:
+        type: {const: rename}
+        from:
+          allOf:
+            - $ref: '#/components/schemas/PipelineMetaName'
+          description: The metadata field to move.
+        to:
+          allOf:
+            - $ref: '#/components/schemas/PipelineMetaName'
+          description: The destination metadata name. It must not start with `__`.
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStepRedact:
+      type: object
+      additionalProperties: false
+      required: [type, pattern]
+      description: Replaces every match of a Go RE2 pattern. A missing target or no match is a no-op.
+      properties:
+        type: {const: redact}
+        pattern:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: A Go RE2 pattern.
+        replace:
+          type: string
+          maxLength: 256
+          description: A Go regexp replacement template. When omitted, matches become `***`. An empty string deletes matches.
+        target:
+          type: string
+          default: line
+          description: '`line` or omitted means the log line; any other value is a metadata field name, which must not start with `__`.'
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStepDropIf:
+      type: object
+      additionalProperties: false
+      required: [type, expr]
+      description: Drops the entry when the expression is true.
+      properties:
+        type: {const: drop_if}
+        expr:
+          allOf:
+            - $ref: '#/components/schemas/PipelineExpression'
+          minLength: 1
+          description: A boolean expression.
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStepPromote:
+      type: object
+      additionalProperties: false
+      required: [type, to]
+      description: |
+        Copies a string into a stream label. Ingest stage only. Takes exactly one of
+        `from` or `value`. A missing `from` field is a no-op.
+      oneOf:
+        - required: [from]
+        - required: [value]
+      properties:
+        type: {const: promote}
+        from:
+          allOf:
+            - $ref: '#/components/schemas/PipelineMetaName'
+          description: The metadata field to copy. Here `line` is an ordinary metadata name, not the log line.
+        value:
+          allOf:
+            - $ref: '#/components/schemas/PipelineExpression'
+          description: A string expression.
+        to:
+          type: string
+          pattern: '^[A-Za-z][A-Za-z0-9_]*$'
+          description: |
+            The target label. It must not start with `_`, must not equal `line`,
+            `labels` or `meta` in any letter case, and must not differ only in case from
+            an earlier `promote` target in the same definition.
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStepSetStream:
+      type: object
+      additionalProperties: false
+      required: [type]
+      description: |
+        Sanitizes a value and writes it to the first configured routing label
+        (`-stream.labels`). An empty result routes to `default`. Ingest stage only.
+        Takes exactly one of `from` or `value`.
+      oneOf:
+        - required: [from]
+        - required: [value]
+      properties:
+        type: {const: set_stream}
+        from:
+          allOf:
+            - $ref: '#/components/schemas/PipelineMetaName'
+          description: The metadata field to read.
+        value:
+          allOf:
+            - $ref: '#/components/schemas/PipelineExpression'
+          description: A string expression.
+        when: {$ref: '#/components/schemas/PipelineWhen'}
+        on_error: {$ref: '#/components/schemas/PipelineOnError'}
+
+    PipelineStep:
+      description: |
+        One step, a tagged union on `type`. A member the step type does not use is
+        rejected, even when it is empty, and a member set to null is rejected.
+      oneOf:
+        - $ref: '#/components/schemas/PipelineStepParseJSON'
+        - $ref: '#/components/schemas/PipelineStepParseLogfmt'
+        - $ref: '#/components/schemas/PipelineStepRegexExtract'
+        - $ref: '#/components/schemas/PipelineStepRename'
+        - $ref: '#/components/schemas/PipelineStepRedact'
+        - $ref: '#/components/schemas/PipelineStepDropIf'
+        - $ref: '#/components/schemas/PipelineStepPromote'
+        - $ref: '#/components/schemas/PipelineStepSetStream'
+      discriminator:
+        propertyName: type
+        mapping:
+          parse_json: '#/components/schemas/PipelineStepParseJSON'
+          parse_logfmt: '#/components/schemas/PipelineStepParseLogfmt'
+          regex_extract: '#/components/schemas/PipelineStepRegexExtract'
+          rename: '#/components/schemas/PipelineStepRename'
+          redact: '#/components/schemas/PipelineStepRedact'
+          drop_if: '#/components/schemas/PipelineStepDropIf'
+          promote: '#/components/schemas/PipelineStepPromote'
+          set_stream: '#/components/schemas/PipelineStepSetStream'
+
+    PipelineName:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9._-]+$'
+      not:
+        enum: ['.', '..']
+      description: Unique per tenant across both stages. Matching pipelines run in byte order of name.
+
+    PipelineSelector:
+      type: string
+      description: '`*` for every dataset, or one exact dataset name that is already sanitized: 1 to 128 bytes of lowercase `a-z`, digits, `_` and `-`.'
+      oneOf:
+        - const: '*'
+        - pattern: '^[a-z0-9_-]{1,128}$'
+
+    PipelineDefinition:
+      type: object
+      additionalProperties: false
+      required: [name, stage, selector, steps]
+      description: A pipeline definition without a version. This is the shape of a dry-run candidate.
+      properties:
+        name: {$ref: '#/components/schemas/PipelineName'}
+        stage: {$ref: '#/components/schemas/PipelineStage'}
+        selector: {$ref: '#/components/schemas/PipelineSelector'}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/PipelineStep'
+
+    PipelineCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, stage, selector, steps]
+      properties:
+        name: {$ref: '#/components/schemas/PipelineName'}
+        stage: {$ref: '#/components/schemas/PipelineStage'}
+        selector: {$ref: '#/components/schemas/PipelineSelector'}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/PipelineStep'
+        version:
+          type: integer
+          format: int64
+          const: 0
+          description: Optional. Omit it or send 0.
+
+    PipelineReplaceRequest:
+      type: object
+      additionalProperties: false
+      required: [name, stage, selector, steps, version]
+      properties:
+        name:
+          allOf:
+            - $ref: '#/components/schemas/PipelineName'
+          description: Must equal the path name.
+        stage: {$ref: '#/components/schemas/PipelineStage'}
+        selector: {$ref: '#/components/schemas/PipelineSelector'}
+        steps:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: '#/components/schemas/PipelineStep'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The live version this write replaces.
+
+    PipelineDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The live version to delete.
+
+    Pipeline:
+      type: object
+      additionalProperties: false
+      required: [name, stage, selector, steps, version, created_at, updated_at]
+      description: A stored pipeline. The tenant is never included. Step members that are empty are omitted, except an explicit empty `replace`.
+      properties:
+        name: {$ref: '#/components/schemas/PipelineName'}
+        stage: {$ref: '#/components/schemas/PipelineStage'}
+        selector: {$ref: '#/components/schemas/PipelineSelector'}
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineStep'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: The optimistic concurrency version. It starts at 1 and goes up by one on every replace or delete. It never goes back across delete and create.
+        created_at:
+          type: string
+          format: date-time
+          description: When this name was last created, in UTC with microsecond precision.
+        updated_at:
+          type: string
+          format: date-time
+          description: When this pipeline was last written, in UTC with microsecond precision.
+      example:
+        name: example-redact
+        stage: ingest
+        selector: example-service
+        steps:
+          - type: redact
+            pattern: "card=[0-9]{12,19}"
+            replace: "card=***"
+        version: 1
+        created_at: "2026-01-01T00:00:00.123456Z"
+        updated_at: "2026-01-01T00:00:00.123456Z"
+
+    PipelineList:
+      type: object
+      additionalProperties: false
+      required: [pipelines]
+      properties:
+        pipelines:
+          type: array
+          description: Live pipelines sorted by name.
+          items:
+            $ref: '#/components/schemas/Pipeline'
+
+    PipelineDryRunEntry:
+      type: object
+      additionalProperties: false
+      description: One sample entry in a request, or one resulting entry in a response. Responses always include `line`, `labels` and `meta`.
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Optional RFC3339 timestamp. Pipelines never change it; the response echoes it, and omits it when the input had none.
+        line:
+          type: string
+          description: The log line. When omitted it is empty.
+        labels:
+          type: object
+          additionalProperties: {type: string}
+          propertyNames:
+            pattern: '^[A-Za-z_][A-Za-z0-9_]*$'
+          description: Stream labels. They choose the entry's dataset. When omitted, the entry has no labels. The response always includes this member, as `{}` when empty.
+        meta:
+          type: object
+          additionalProperties: {type: string}
+          propertyNames:
+            pattern: '^[A-Za-z_][A-Za-z0-9_]*$'
+          description: Structured metadata. The response always includes this member, as `{}` when empty.
+
+    PipelineDryRunRequest:
+      type: object
+      additionalProperties: false
+      required: [pipeline]
+      properties:
+        pipeline:
+          $ref: '#/components/schemas/PipelineDefinition'
+        entries:
+          type: array
+          maxItems: 1000
+          description: Sample entries. When omitted or empty, the response has no entries.
+          items:
+            $ref: '#/components/schemas/PipelineDryRunEntry'
+
+    PipelineDryRunResponse:
+      type: object
+      additionalProperties: false
+      required: [entries, dropped]
+      properties:
+        entries:
+          type: array
+          description: Every entry that was not dropped, in input order, with its resulting line, labels and metadata.
+          items:
+            $ref: '#/components/schemas/PipelineDryRunEntry'
+        dropped:
+          type: integer
+          minimum: 0
+          description: How many entries the pipeline dropped.

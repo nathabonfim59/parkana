@@ -1,0 +1,376 @@
+/*
+ * Parkana docs theme: bamboo-raft's docs theme in a Parquet teal-blue.
+ * Structure from opencode.ai/docs (monospace headings and labels, [ ] sidebar markers, hairline borders),
+ * PlanetScale's blog (dotted rules, bracketed tags) and Linear (near-black dark mode, tight Inter
+ * headings, translucent borders, square buttons).
+ *
+ * Contrast (WCAG 2): body text (text-1, text-2, text-3), links (text-1, accent on hover) and button
+ * labels are at least 4.5:1 against their background in light and dark mode.
+ */
+
+:root {
+  --pk-sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --pk-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --pk-accent: #0c6680;
+  --pk-accent-hover: #094f63;
+  --pk-accent-soft: rgba(12, 102, 128, 0.1);
+
+  --vp-font-family-base: var(--pk-sans);
+  --vp-font-family-mono: var(--pk-mono);
+
+  --vp-c-bg: #f7f9fa;
+  --vp-c-bg-alt: #eef3f5;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #e9f0f3;
+  --vp-c-text-1: #131517;
+  --vp-c-text-2: #3d4347;
+  --vp-c-text-3: #626a70;
+  --vp-c-divider: #d5dfe4;
+  --vp-c-gutter: #e3eaee;
+  --vp-c-border: #c6d3d9;
+
+  --vp-c-brand-1: var(--pk-accent);
+  --vp-c-brand-2: var(--pk-accent-hover);
+  --vp-c-brand-3: var(--pk-accent);
+  --vp-c-brand-soft: var(--pk-accent-soft);
+
+  --vp-button-brand-bg: var(--pk-accent);
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-border: var(--pk-accent);
+  --vp-button-brand-hover-border: var(--pk-accent);
+  --vp-button-brand-hover-text: var(--pk-accent);
+  --vp-button-brand-hover-bg: transparent;
+  --vp-button-brand-active-border: var(--pk-accent);
+  --vp-button-brand-active-text: var(--pk-accent);
+  --vp-button-brand-active-bg: transparent;
+  --vp-button-alt-border: #7f8e96;
+  --vp-button-alt-hover-border: var(--pk-accent);
+  --vp-button-alt-hover-text: var(--pk-accent);
+  --vp-button-alt-bg: transparent;
+  --vp-button-alt-hover-bg: var(--vp-c-bg-soft);
+  --vp-button-alt-text: var(--vp-c-text-1);
+
+  --vp-code-block-bg: #eef3f5;
+  --vp-code-bg: rgba(19, 21, 23, 0.06);
+  --vp-code-color: #0a5a71;
+
+  --vp-home-hero-name-color: var(--vp-c-text-1);
+  --vp-layout-max-width: 1440px;
+}
+
+.dark {
+  --vp-c-bg: #06090b;
+  --vp-c-bg-alt: #0a0e11;
+  --vp-c-bg-elv: #10161a;
+  --vp-c-bg-soft: #10161a;
+  --vp-c-text-1: #f5f7f8;
+  --vp-c-text-2: #c2c8cc;
+  --vp-c-text-3: #8a939a;
+  --vp-c-divider: rgba(255, 255, 255, 0.08);
+  --vp-c-gutter: rgba(255, 255, 255, 0.05);
+  --vp-c-border: rgba(255, 255, 255, 0.12);
+
+  --pk-accent: #4db8d6;
+  --pk-accent-hover: #80cfe5;
+  --pk-accent-soft: rgba(77, 184, 214, 0.14);
+  --vp-button-alt-border: #5b666c;
+  --vp-button-brand-text: #06090b;
+
+  --vp-code-block-bg: rgba(255, 255, 255, 0.04);
+  --vp-code-bg: rgba(255, 255, 255, 0.07);
+  --vp-code-color: #9ad8ea;
+}
+
+body {
+  letter-spacing: -0.003em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Top bar: mono labels, hairline bottom border (opencode, Linear) ---- */
+.VPNav .VPNavBar,
+.VPNavBar.has-sidebar .content-body {
+  background: var(--vp-c-bg);
+}
+.VPNavBar .divider-line { background: var(--vp-c-divider); }
+.VPNavBarTitle .title {
+  font-family: var(--pk-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.VPNavBarTitle .title::before {
+  content: '';
+  width: 16px;
+  height: 18px;
+  margin-right: 10px;
+  /* Three columns of different heights: columnar storage, as in the favicon. */
+  background:
+    linear-gradient(var(--pk-accent), var(--pk-accent)) 0 100% / 4px 60% no-repeat,
+    linear-gradient(var(--pk-accent), var(--pk-accent)) 6px 100% / 4px 100% no-repeat,
+    linear-gradient(var(--pk-accent), var(--pk-accent)) 12px 100% / 4px 78% no-repeat;
+  display: inline-block;
+}
+.VPNavBarMenuLink,
+.VPNavBarMenuGroup .text {
+  font-family: var(--pk-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+}
+.VPNavBarMenuLink:hover,
+.VPNavBarMenuLink.active { color: var(--pk-accent); }
+
+/* ---- Sidebar: [ ] markers and small caps labels (opencode) ---- */
+.VPSidebar { background: var(--vp-c-bg); }
+.VPSidebarItem.level-0 > .item > .text,
+.VPSidebarItem.level-0 > .item > h2.text {
+  font-family: var(--pk-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+.VPSidebarItem.level-1 .link > .text,
+.VPSidebarItem.level-2 .link > .text {
+  font-family: var(--pk-mono);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--vp-c-text-2);
+}
+.VPSidebarItem.level-1 .link > .text::before {
+  content: '[ ] ';
+  white-space: pre;
+  color: var(--vp-c-text-3);
+}
+.VPSidebarItem.level-1.is-active > .item > .link > .text::before {
+  content: '[-] ';
+  color: var(--pk-accent);
+}
+.VPSidebarItem.level-1.is-active > .item > .link > .text {
+  color: var(--vp-c-text-1);
+  font-weight: 600;
+}
+.VPSidebarItem .link:hover > .text { color: var(--pk-accent); }
+.VPSidebarItem.is-active > .item > .indicator { display: none; }
+.VPSidebar .group + .group { border-top: 1px dotted var(--vp-c-border); padding-top: 18px; }
+
+/* ---- Content: Linear-style tight headings, dotted section rules (PlanetScale) ---- */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.vp-doc h4 { font-family: var(--pk-mono); }
+.vp-doc h1 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.vp-doc h2 {
+  margin-top: 56px;
+  padding-top: 28px;
+  border-top: 1px dotted var(--vp-c-border);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+/* VitePress offsets the hover "#" by the default h2 padding (24px). Ours is 28px. */
+.vp-doc h2 > .header-anchor { top: 28px; }
+.vp-doc h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.vp-doc a {
+  color: var(--vp-c-text-1);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--vp-c-border);
+  text-underline-offset: 3px;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.vp-doc a:hover { color: var(--pk-accent); text-decoration-color: var(--pk-accent); }
+.vp-doc a.header-anchor { text-decoration: none; }
+.vp-doc strong { font-weight: 600; }
+.vp-doc blockquote { border-left: 2px solid var(--pk-accent); }
+
+/* ---- Code: flat, hairline, mono (opencode) ---- */
+.vp-doc :not(pre) > code {
+  font-family: var(--pk-mono);
+  font-size: 0.86em;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+}
+.vp-doc div[class*='language-'] {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 4px;
+  background: var(--vp-code-block-bg);
+}
+.vp-doc [class*='language-'] code,
+.vp-doc [class*='language-'] pre {
+  font-family: var(--pk-mono);
+  font-size: 13px;
+}
+.vp-doc [class*='language-'] > span.lang {
+  font-family: var(--pk-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+/* ---- Tables and callouts: hairlines, no fills ---- */
+.vp-doc table { display: block; max-width: 100%; overflow-x: auto; border: 1px solid var(--vp-c-divider); border-radius: 4px; }
+.vp-doc th {
+  font-family: var(--pk-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+  background: transparent;
+}
+.vp-doc tr, .vp-doc th, .vp-doc td { border-color: var(--vp-c-divider); }
+.vp-doc tr:nth-child(2n) { background: transparent; }
+.vp-doc .custom-block {
+  border: 1px solid var(--vp-c-divider);
+  border-left: 3px solid var(--pk-accent);
+  border-radius: 4px;
+  background: transparent;
+}
+.vp-doc .custom-block-title { font-family: var(--pk-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* ---- Right-hand outline: CONTENTS label with a bar marker (opencode) ---- */
+.VPDocAsideOutline .outline-title {
+  font-family: var(--pk-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+.VPDocAsideOutline .outline-link { font-family: var(--pk-mono); font-size: 12px; }
+.VPDocAsideOutline .outline-link:hover,
+.VPDocAsideOutline .outline-link.active { color: var(--pk-accent); }
+.VPDocAsideOutline .outline-marker { background: var(--pk-accent); width: 2px; }
+
+/* ---- Search box ---- */
+.VPNavBarSearchButton,
+.DocSearch-Button,
+.VPNavBarSearch .DocSearch-Button,
+.VPNavBarSearchButton .vp-meta-key,
+.DocSearch-Button .DocSearch-Button-Key { border-radius: 0; }
+
+/* ---- Home: big tight headline (Linear), square accent and outline buttons (PlanetScale) ---- */
+.VPHero .name, .VPHero .text {
+  font-family: var(--pk-mono);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+.VPHero .name {
+  font-family: var(--pk-mono);
+  font-size: 14px !important;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pk-accent);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+.VPHero .text { font-size: clamp(2rem, 5vw, 3.6rem); }
+.VPHero .tagline {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-3);
+  max-width: 34em;
+}
+.VPButton {
+  font-family: var(--pk-mono);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 0;
+}
+.VPButton.alt:hover { border-color: var(--pk-accent); color: var(--pk-accent); }
+
+/* Every button has a 2px outline, about the stroke width of the 13px semibold mono label, so the
+   hover state can change colors without changing size. */
+.VPButton.medium { border-width: 2px; line-height: 36px; }
+.VPButton.alt { border-color: var(--vp-c-border); }
+
+/* Primary button: uppercase label. On hover the fill goes transparent and the label and outline
+   take the accent color, which stays readable on both the light and the dark background. */
+.VPButton.brand {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-color: var(--pk-accent);
+  transition: background-color 0.15s, color 0.15s;
+}
+.VPButton.medium.brand:hover,
+.VPButton.medium.brand:active {
+  background-color: transparent;
+  border-color: var(--pk-accent);
+  color: var(--pk-accent);
+}
+
+.VPFeatures .VPFeature,
+.VPFeatures .VPLink.link { border-radius: 4px; }
+.VPFeature {
+  background: transparent !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  border-radius: 4px !important;
+  transition: border-color 0.15s;
+}
+.VPFeature:hover { border-color: var(--pk-accent) !important; }
+.VPFeature .title {
+  font-family: var(--pk-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+/* Four cards across need about 1280px for a one-line title. Use two columns below that. */
+@media (min-width: 960px) and (max-width: 1279px) {
+  .VPFeatures .item.grid-4 { width: 50%; }
+}
+/* Non-breaking spaces keep each bracket on the same line as the word next to it. */
+.VPFeature .title::before { content: '[\00a0'; color: var(--pk-accent); }
+.VPFeature .title::after { content: '\00a0]'; color: var(--pk-accent); }
+.VPFeature .details { color: var(--vp-c-text-3); line-height: 1.65; }
+
+/* ---- Footer and pager ---- */
+.VPDocFooter .prev-next { border-top: 1px dotted var(--vp-c-border); }
+.VPDocFooterLateUpdated, .VPFooter .message, .edit-link-button { font-family: var(--pk-mono); font-size: 12px; }
+.VPDocFooter .pager-link { border-radius: 0; border-color: var(--vp-c-divider); }
+.VPDocFooter .pager-link:hover { border-color: var(--pk-accent); }
+.VPDocFooter .pager-link .title { color: var(--pk-accent); font-family: var(--pk-mono); }
+
+::selection { background: var(--pk-accent); color: var(--vp-button-brand-text); }
+
+/* ---- Spacing and wrapping fixes ---- */
+.VPHero .tagline { margin-top: 28px; }
+.VPHero .actions { margin-top: 36px; }
+.VPSidebarItem.level-1 .link > .text {
+  display: block;
+  padding-left: 4ch;
+  text-indent: -4ch;
+}
+
+/* ---- Square corners on every button ---- */
+.VPButton,
+.VPSwitch,
+.VPSwitch .check,
+.VPNavBarAppearance .VPSwitchAppearance,
+.vp-doc div[class*='language-'] > button.copy,
+.VPLocalSearchBox .search-keyboard-shortcuts kbd,
+.VPLocalSearchBox .result > a,
+.VPNavScreenMenuLink,
+.VPFlyout .button { border-radius: 0 !important; }
+.VPSwitch .check { width: 18px; height: 18px; }
+
+/* ---- Keyboard focus: a visible accent ring everywhere ---- */
+:focus-visible { outline: 2px solid var(--pk-accent); outline-offset: 2px; }
+
+/* ---- GitHub icon: always in the top-right corner of the nav bar ---- */
+.VPNavBarSocialLinks { display: flex !important; }
+.VPNavBarExtra .group:has(.VPSocialLinks) { display: none; }
+@media (max-width: 767px) { .VPNavBarSocialLinks { margin-right: -4px; } }

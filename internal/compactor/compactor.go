@@ -20,6 +20,10 @@ import (
 	"github.com/nathabonfim59/parkana/internal/tenant"
 )
 
+// orphanDisabledMemoryMsg is logged once by New when the catalog driver is
+// memory.
+const orphanDisabledMemoryMsg = "orphan collection disabled: the memory catalog forgets every file on restart, so every object would look orphaned"
+
 // maxMergeInputs bounds the files, and so the open storage.Readers, of one
 // merge, no matter how many candidates a group holds.
 const maxMergeInputs = 32
@@ -45,6 +49,10 @@ type service struct {
 	// merge is the Parquet merge seam. Production uses storage.Merge; focused
 	// tests replace it to inject malformed row accounting at the boundary.
 	merge mergeFunc
+	// orphansOff is set when the catalog driver is memory: that catalog
+	// starts empty after every restart, so orphan GC would delete
+	// everything. Retention and purge still run.
+	orphansOff bool
 
 	cycles       prometheus.Counter
 	cycleErrors  prometheus.Counter
@@ -52,6 +60,8 @@ type service struct {
 	filesMerged  prometheus.Counter
 	bytesMerged  prometheus.Counter
 	cycleSeconds prometheus.Histogram
+	// orphanSkips counts orphan sweeps the safety stop refused to run.
+	orphanSkips prometheus.Counter
 }
 
 // New builds the compactor role from deps. It validates the compactor config,
@@ -59,8 +69,9 @@ type service struct {
 // metrics on deps.Metrics and the shared parkana_index_* collectors, and
 // returns an error for invalid index params rather than substituting
 // defaults: config.Load always fills them, so a zero or half-set Index section
-// reaching New is a wiring bug. deps.Store and deps.Catalog stay owned by the
-// caller and are never closed here.
+// reaching New is a wiring bug. With the memory catalog driver, orphan GC is
+// turned off and New logs a warning once. deps.Store and deps.Catalog stay
+// owned by the caller and are never closed here.
 func New(deps app.Deps) (app.Service, error) {
 	cfg := deps.Config.Compactor
 	params := deps.Config.Index.Params()
@@ -80,6 +91,9 @@ func New(deps app.Deps) (app.Service, error) {
 	case deps.Metrics == nil:
 		return nil, errors.New("compactor: nil metrics registry")
 	}
+	if err := cfg.ValidateOrphanGC(); err != nil {
+		return nil, fmt.Errorf("compactor: %w", err)
+	}
 	if err := params.Validate(); err != nil {
 		return nil, fmt.Errorf("compactor: sidecar index params: %w", err)
 	}
@@ -97,6 +111,12 @@ func New(deps app.Deps) (app.Service, error) {
 		idx:    idx,
 		skips:  newSkipSet(backfillSkipCapacity),
 		merge:  storage.Merge,
+		// Only an explicit memory driver turns orphan GC off; hand-built
+		// test configs leave the driver empty.
+		orphansOff: deps.Config.Catalog.Driver == "memory",
+	}
+	if s.orphansOff && cfg.OrphanGrace > 0 {
+		s.log.Warn(orphanDisabledMemoryMsg, "catalog_driver", deps.Config.Catalog.Driver)
 	}
 	if s.cycles, err = registerMetric(deps.Metrics, prometheus.NewCounter(prometheus.CounterOpts{
 		Name: "parkana_compactor_cycles_total", Help: "Compaction cycles started.",
@@ -127,6 +147,12 @@ func New(deps app.Deps) (app.Service, error) {
 		Name:    "parkana_compactor_cycle_duration_seconds",
 		Help:    "Compaction cycle latency.",
 		Buckets: prometheus.ExponentialBuckets(0.01, 4, 8),
+	})); err != nil {
+		return nil, err
+	}
+	if s.orphanSkips, err = registerMetric(deps.Metrics, prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "parkana_compactor_orphan_sweeps_skipped_total",
+		Help: "Orphan GC sweeps that deleted nothing because the candidates exceeded -compactor.orphan-max-fraction of the listed objects.",
 	})); err != nil {
 		return nil, err
 	}
@@ -202,10 +228,18 @@ func (s *service) cycle(ctx context.Context) error {
 		// Retention, delete-delay purge and orphan GC run for the tenant
 		// even when it has no streams or listing them fails: unreferenced
 		// objects can exist where no live catalog row does.
-		st, err := cleanup(ctx, s.store, s.cat, t, time.Now(), s.cfg.Retention, s.cfg.DeleteDelay)
+		st, err := cleanup(ctx, s.store, s.cat, t, time.Now(), s.cfg.Retention, s.cfg.DeleteDelay, s.orphanPolicy())
 		if st != (cleanupStats{}) {
 			s.log.Info("compactor cleanup",
-				"tenant", t, "marked", st.marked, "purged", st.purged, "orphaned", st.orphaned)
+				"tenant", t, "marked", st.marked, "purged", st.purged, "orphaned", st.orphaned,
+				"orphan_sweep_skipped", st.orphanSkip != nil)
+		}
+		if sk := st.orphanSkip; sk != nil {
+			s.orphanSkips.Inc()
+			s.log.Error("orphan collection skipped",
+				"tenant", t, "candidates", sk.candidates, "listed", sk.listed, "referenced", sk.referenced,
+				"fraction", s.cfg.OrphanMaxFraction, "sample", sk.sample,
+				"hint", "check that the compactor uses the right catalog; see Orphan collection skipped in docs/operations.md")
 		}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -239,6 +273,15 @@ func (s *service) cycle(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// orphanPolicy is the orphan scan configuration for this service: off (grace
+// 0) for the memory catalog, otherwise the configured grace and fraction.
+func (s *service) orphanPolicy() orphanPolicy {
+	if s.orphansOff {
+		return orphanPolicy{}
+	}
+	return orphanPolicy{grace: s.cfg.OrphanGrace, maxFraction: s.cfg.OrphanMaxFraction}
 }
 
 // compactStream lists the stream's live files, groups them by the UTC hour in

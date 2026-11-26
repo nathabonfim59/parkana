@@ -24,6 +24,10 @@ type Ingest struct {
 	UploadMaxAge     time.Duration // or once its oldest file is this old
 	UploadMergeMax   ByteSize      // merge local files up to this size per upload
 
+	// QuarantineRetention is how long a file moved into the local quarantine
+	// directory is kept; 0 keeps it forever (ingest_quarantine.go).
+	QuarantineRetention time.Duration
+
 	// Promotions moves label values out of the labels map into their own
 	// nullable string columns, per stream. The stream name is exact, or "*"
 	// for every stream without an own assignment. Column order is kept.
@@ -50,6 +54,7 @@ func (c *Ingest) register(fs *flag.FlagSet) {
 		Promotions: []StreamPromotion{{Stream: "*", Columns: []string{"level"}}},
 	}
 	c.registerRuntime(fs)
+	c.registerQuarantine(fs)
 	fs.Var(&c.MaxLineSize, "ingest.max-line-size", "reject push lines longer than this")
 	fs.Var(&c.MaxRequestSize, "ingest.max-request-size", "reject push requests larger than this")
 	fs.Var(&c.MemtableMaxBytes, "ingest.memtable-max", "seal the memtable at this size")
@@ -90,6 +95,7 @@ func (c Ingest) validate() []error {
 	}
 	errs = append(errs, validatePromotions(c.Promotions)...)
 	errs = append(errs, c.validateRuntime()...)
+	errs = append(errs, c.validateQuarantine()...)
 	return errs
 }
 

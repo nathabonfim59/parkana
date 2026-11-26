@@ -49,6 +49,7 @@ const (
 	MatchNotRegexp
 )
 
+// String returns the matcher's LogQL operator: =, !=, =~ or !~.
 func (t MatchType) String() string {
 	switch t {
 	case MatchEqual:
@@ -130,6 +131,7 @@ func (m Matcher) MatchesLabels(ls logs.Labels) bool {
 // rejects selectors where every matcher does.
 func (m Matcher) MatchesEmpty() bool { return m.Matches("") }
 
+// String renders name op "value" as in a LogQL selector.
 func (m Matcher) String() string { return m.Name + m.Type.String() + strconv.Quote(m.Value) }
 
 // LineFilterType is a line filter's operator.
@@ -143,6 +145,7 @@ const (
 	LineNotRegexp
 )
 
+// String returns the filter's LogQL operator: |=, !=, |~ or !~.
 func (t LineFilterType) String() string {
 	switch t {
 	case LineContains:
@@ -210,6 +213,7 @@ func (f LineFilter) Matches(line string) bool {
 	return false
 }
 
+// String renders op "value" as in a LogQL query.
 func (f LineFilter) String() string { return f.Type.String() + " " + strconv.Quote(f.Value) }
 
 // Direction orders rows by timestamp.
@@ -222,6 +226,7 @@ const (
 	Forward
 )
 
+// String returns "forward" or "backward".
 func (d Direction) String() string {
 	if d == Forward {
 		return "forward"

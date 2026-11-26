@@ -54,6 +54,8 @@ func (s *FS) validate(key string) error {
 	return nil
 }
 
+// Put implements Store.Put: it writes a temp file, fsyncs it, renames it
+// to key and fsyncs every directory up to the root.
 func (s *FS) Put(ctx context.Context, key string, r io.Reader, size int64) error {
 	if err := s.validate(key); err != nil {
 		return err
@@ -129,10 +131,12 @@ func (s *FS) syncDir(dir string) error {
 	return nil
 }
 
+// Get implements Store.Get.
 func (s *FS) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	return s.GetRange(ctx, key, 0, -1)
 }
 
+// GetRange implements Store.GetRange.
 func (s *FS) GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
 	if err := s.validate(key); err != nil {
 		return nil, err
@@ -162,6 +166,7 @@ func (s *FS) GetRange(ctx context.Context, key string, offset, length int64) (io
 	return readCloser{io.NewSectionReader(f, offset, length), f}, nil
 }
 
+// Stat implements Store.Stat.
 func (s *FS) Stat(ctx context.Context, key string) (Info, error) {
 	if err := s.validate(key); err != nil {
 		return Info{}, err
@@ -176,6 +181,8 @@ func (s *FS) Stat(ctx context.Context, key string) (Info, error) {
 	return Info{Key: key, Size: st.Size(), ModTime: st.ModTime()}, nil
 }
 
+// List implements Store.List. It walks only the deepest directory the
+// prefix fully names.
 func (s *FS) List(ctx context.Context, prefix string) iter.Seq2[Info, error] {
 	return func(yield func(Info, error) bool) {
 		// Walk only the deepest directory the prefix fully names.
@@ -217,6 +224,7 @@ func (s *FS) List(ctx context.Context, prefix string) iter.Seq2[Info, error] {
 	}
 }
 
+// Delete implements Store.Delete and fsyncs the key's directory.
 func (s *FS) Delete(ctx context.Context, key string) error {
 	if err := s.validate(key); err != nil {
 		return err
@@ -233,6 +241,7 @@ func (s *FS) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// Close closes the store's root directory.
 func (s *FS) Close() error { return s.root.Close() }
 
 type readCloser struct {

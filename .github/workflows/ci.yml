@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # Integration tests skip here (no PARKANA_TEST_* variables: Postgres, S3, crash runs).
+      - run: make check
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: npm ci
+      # Generates the HTTP and Go API reference from api/parkana.yaml and the Go source, then builds
+      # the site; dead links, dead #anchors and an out-of-date llms.txt fail the build.
+      - run: npm run docs:build
+
+  plugin:
+    name: Grafana plugin
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: grafana/parkana-datasource/go.mod
+          cache-dependency-path: grafana/parkana-datasource/go.sum
+      - name: Backend go vet and go test
+        run: make plugin-check
+        env:
+          CGO_ENABLED: '0'
+      # The frontend runs in the plugin's pinned Node container (docker on the runner): npm ci,
+      # typecheck, unit tests, lint and the production build, then the five backends and the zip.
+      - name: Frontend checks and the plugin zip
+        run: make plugin-dist VERSION="ci-${GITHUB_SHA::12}" PLUGIN_FRONTEND_FLAGS=--check
+      - uses: actions/upload-artifact@v7
+        with:
+          name: parkana-sql-datasource
+          path: |
+            dist/parkana-sql-datasource-*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error

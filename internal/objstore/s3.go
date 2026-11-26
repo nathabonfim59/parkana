@@ -44,7 +44,8 @@ type S3Options struct {
 	// signed requests.
 	AccessKey string
 	SecretKey string
-	// Insecure uses plain HTTP, for a local MinIO.
+	// Insecure uses plain HTTP and sends unsigned payloads, for local test
+	// stores only.
 	Insecure bool
 	// CreateBucket makes NewS3 check that Bucket exists and create it when it
 	// does not, using Region as the location. The default is false: NewS3 does
@@ -168,6 +169,8 @@ func isS3NotExist(err error) bool {
 	return resp.StatusCode == http.StatusNotFound
 }
 
+// Put implements Store.Put. With an unknown size (size < 0) it uploads in
+// multipart parts, buffering one part at a time.
 func (s *S3) Put(ctx context.Context, key string, r io.Reader, size int64) error {
 	if err := s.validate(key); err != nil {
 		return err
@@ -202,6 +205,8 @@ func (s *S3) Put(ctx context.Context, key string, r io.Reader, size int64) error
 	return nil
 }
 
+// Get implements Store.Get. It stats the object first, so a missing key
+// fails here with ErrNotExist rather than on the first read.
 func (s *S3) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	obj, err := s.open(ctx, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -233,6 +238,8 @@ func (s *S3) open(ctx context.Context, key string, opts minio.GetObjectOptions) 
 	return obj, nil
 }
 
+// GetRange implements Store.GetRange, clipping the range to the object
+// size as FS does.
 func (s *S3) GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
 	if err := s.validate(key); err != nil {
 		return nil, err
@@ -263,6 +270,7 @@ func (s *S3) GetRange(ctx context.Context, key string, offset, length int64) (io
 	return s.open(ctx, key, opts)
 }
 
+// Stat implements Store.Stat.
 func (s *S3) Stat(ctx context.Context, key string) (Info, error) {
 	if err := s.validate(key); err != nil {
 		return Info{}, err
@@ -277,6 +285,7 @@ func (s *S3) Stat(ctx context.Context, key string) (Info, error) {
 	return Info{Key: key, Size: oi.Size, ModTime: oi.LastModified}, nil
 }
 
+// List implements Store.List.
 func (s *S3) List(ctx context.Context, prefix string) iter.Seq2[Info, error] {
 	return func(yield func(Info, error) bool) {
 		if s.closed.Load() {
@@ -306,6 +315,7 @@ func (s *S3) List(ctx context.Context, prefix string) iter.Seq2[Info, error] {
 	}
 }
 
+// Delete implements Store.Delete.
 func (s *S3) Delete(ctx context.Context, key string) error {
 	if err := s.validate(key); err != nil {
 		return err

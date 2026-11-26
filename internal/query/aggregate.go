@@ -2,6 +2,7 @@
 // over the listed object groups become one GROUP BY statement over the same
 // normalized relation Select compiles, with all bucket arithmetic in exact
 // wide integers and Go time.Duration saturation semantics.
+
 package query
 
 import (

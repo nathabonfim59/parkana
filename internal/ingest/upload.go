@@ -234,8 +234,10 @@ const (
 	uploadMaxConcurrency = 64
 	// uploadOrphanGrace is how long a completed Put may wait before
 	// Catalog.AddFiles. The compactor's orphan GC deletes objects without a
-	// catalog row after one hour, so a Put older than this must not be
-	// published under its old key.
+	// catalog row once they are older than -compactor.orphan-grace, which is
+	// at least config.MinOrphanGrace, so a Put older than this must not be
+	// published under its old key. TestUploadOrphanGraceBelowCompactorMin
+	// keeps it below that minimum.
 	uploadOrphanGrace = 30 * time.Minute
 	// uploadPutAttempts bounds the rotate-and-re-put loop when a Put itself
 	// takes longer than the orphan grace.

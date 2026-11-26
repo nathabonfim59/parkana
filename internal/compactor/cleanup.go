@@ -4,18 +4,43 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/nathabonfim59/parkana/internal/catalog"
+	"github.com/nathabonfim59/parkana/internal/config"
 	"github.com/nathabonfim59/parkana/internal/objstore"
 	"github.com/nathabonfim59/parkana/internal/tenant"
 )
 
-// cleanupOrphanGrace is how long an unreferenced object must be untouched
-// before an orphan scan may delete it. A file that was just written but whose
-// catalog row has not landed yet must survive.
-const cleanupOrphanGrace = time.Hour
+// orphanGuardSample is how many candidate keys a skipped sweep reports.
+const orphanGuardSample = 10
+
+// orphanPolicy configures one orphan scan.
+type orphanPolicy struct {
+	// grace is how long an unreferenced object must be untouched before it
+	// may be deleted: its ModTime must be strictly before now-grace. A file
+	// that was just written but whose catalog row has not landed yet must
+	// survive. 0 turns the scan off.
+	grace time.Duration
+	// maxFraction is the safety stop: when the candidates are at least
+	// config.OrphanMinCandidates and more than maxFraction of the listed
+	// objects, the scan deletes nothing. 1 turns the stop off.
+	maxFraction float64
+}
+
+// orphanSkip describes an orphan scan the safety stop refused to run.
+type orphanSkip struct {
+	// candidates is the number of unreferenced objects past the grace.
+	candidates int
+	// listed is the number of objects under the tenant's logs prefix.
+	listed int
+	// referenced is the number of listed objects a catalog row protects.
+	referenced int
+	// sample holds the first orphanGuardSample candidates in listing order.
+	sample []string
+}
 
 // cleanupStats reports what one cleanup pass did.
 type cleanupStats struct {
@@ -28,6 +53,9 @@ type cleanupStats struct {
 	// orphaned is the number of unreferenced objects deleted by the orphan
 	// scan.
 	orphaned int
+	// orphanSkip is set when the orphan scan's safety stop tripped and the
+	// scan deleted nothing. It is a decision, not an error.
+	orphanSkip *orphanSkip
 }
 
 // cleanup runs one retention, delete-delay purge and orphan-GC pass for id.
@@ -37,14 +65,15 @@ type cleanupStats struct {
 // before now-deleteDelay and deletes their data and sidecar objects, whether
 // or not the row says the sidecar exists. The orphan scan then removes objects
 // under the tenant's logs prefix that no catalog row references (deleted rows
-// included) and whose object ModTime is strictly older than now-1h.
+// included) and whose object ModTime is strictly older than now-orphans.grace,
+// unless the grace is 0 or the safety stop trips (see cleanupOrphans).
 //
 // The three phases are independent: a failure in one is joined with the
 // others' errors and does not stop the remaining work. An incomplete catalog
 // listing does disable the orphan scan, because deleting objects without the
-// full reference set would be unsafe. Cancellation is checked between phases
-// and between deletions.
-func cleanup(ctx context.Context, store objstore.Store, cat catalog.Catalog, id tenant.ID, now time.Time, retention, deleteDelay time.Duration) (cleanupStats, error) {
+// full reference set would be unsafe, and so does an incomplete object
+// listing. Cancellation is checked between phases and between deletions.
+func cleanup(ctx context.Context, store objstore.Store, cat catalog.Catalog, id tenant.ID, now time.Time, retention, deleteDelay time.Duration, orphans orphanPolicy) (cleanupStats, error) {
 	var st cleanupStats
 	if err := ctx.Err(); err != nil {
 		return st, fmt.Errorf("compactor: cleanup: %w", err)
@@ -74,10 +103,12 @@ func cleanup(ctx context.Context, store objstore.Store, cat catalog.Catalog, id 
 		return st, errors.Join(append(errs, fmt.Errorf("compactor: cleanup: %w", err))...)
 	}
 
-	orphaned, err := cleanupOrphans(ctx, store, cat, id, now)
-	st.orphaned = orphaned
-	if err != nil {
-		errs = append(errs, fmt.Errorf("compactor: cleanup: orphans: %w", err))
+	if orphans.grace > 0 {
+		orphaned, skip, err := cleanupOrphans(ctx, store, cat, id, now, orphans)
+		st.orphaned, st.orphanSkip = orphaned, skip
+		if err != nil {
+			errs = append(errs, fmt.Errorf("compactor: cleanup: orphans: %w", err))
+		}
 	}
 	return st, errors.Join(errs...)
 }
@@ -156,9 +187,17 @@ func cleanupTenantLogsPrefix(id tenant.ID) string {
 }
 
 // cleanupOrphans deletes unreferenced objects under the tenant's logs prefix
-// whose object ModTime is strictly older than now-1h. It returns the number of
-// objects deleted.
-func cleanupOrphans(ctx context.Context, store objstore.Store, cat catalog.Catalog, id tenant.ID, now time.Time) (int, error) {
+// whose object ModTime is strictly older than now-p.grace. It returns the
+// number of objects deleted, or a non-nil skip when the safety stop tripped.
+//
+// It lists the whole prefix before deleting anything, so the safety stop
+// judges the complete picture: when the candidates are at least
+// config.OrphanMinCandidates and more than p.maxFraction of the listed objects,
+// nothing is deleted. Legitimate orphans (interrupted uploads, upload key
+// rotations, failed merges) are a few per crash; a wrong, empty or rolled-back
+// catalog makes most objects look orphaned. A listing that fails or is
+// canceled part way deletes nothing either.
+func cleanupOrphans(ctx context.Context, store objstore.Store, cat catalog.Catalog, id tenant.ID, now time.Time, p orphanPolicy) (int, *orphanSkip, error) {
 	prefix := cleanupTenantLogsPrefix(id)
 
 	// Every catalog row protects its data key and sidecar sibling, deleted
@@ -167,10 +206,10 @@ func cleanupOrphans(ctx context.Context, store objstore.Store, cat catalog.Catal
 	protected := make(map[string]struct{})
 	for f, err := range cat.ListFiles(ctx, catalog.Filter{Tenant: id, IncludeDeleted: true}) {
 		if err != nil {
-			return 0, fmt.Errorf("list catalog references: %w", err)
+			return 0, nil, fmt.Errorf("list catalog references: %w", err)
 		}
 		if err := ctx.Err(); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		protected[f.Key] = struct{}{}
 		protected[objstore.SidecarKey(f.Key)] = struct{}{}
@@ -178,40 +217,64 @@ func cleanupOrphans(ctx context.Context, store objstore.Store, cat catalog.Catal
 	// The iterator can end cleanly after cancellation; never list or delete
 	// objects without the full reference set.
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
-	graceCutoff := now.Add(-cleanupOrphanGrace)
+	graceCutoff := now.Add(-p.grace)
 	var (
-		orphaned int
-		errs     []error
+		candidates         []string
+		listed, referenced int
 	)
 	for info, err := range store.List(ctx, prefix) {
 		if err != nil {
-			errs = append(errs, fmt.Errorf("list objects: %w", err))
-			break
+			return 0, nil, fmt.Errorf("list objects: %w", err)
 		}
 		if err := ctx.Err(); err != nil {
-			errs = append(errs, err)
-			break
+			return 0, nil, err
 		}
 		// Re-check the prefix so a Store that ignores the List prefix can
 		// never make us delete another tenant's object.
 		if !strings.HasPrefix(info.Key, prefix) {
 			continue
 		}
+		listed++
 		if _, ok := protected[info.Key]; ok {
+			referenced++
 			continue
 		}
 		// An unknown ModTime is not proof of age; keep the object.
 		if info.ModTime.IsZero() || !info.ModTime.Before(graceCutoff) {
 			continue
 		}
-		if err := store.Delete(ctx, info.Key); err != nil && !errors.Is(err, objstore.ErrNotExist) {
-			errs = append(errs, fmt.Errorf("delete orphan %s: %w", info.Key, err))
+		candidates = append(candidates, info.Key)
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, nil, err
+	}
+
+	if len(candidates) >= config.OrphanMinCandidates && float64(len(candidates)) > p.maxFraction*float64(listed) {
+		return 0, &orphanSkip{
+			candidates: len(candidates),
+			listed:     listed,
+			referenced: referenced,
+			sample:     slices.Clone(candidates[:min(len(candidates), orphanGuardSample)]),
+		}, nil
+	}
+
+	var (
+		orphaned int
+		errs     []error
+	)
+	for _, key := range candidates {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
+			break
+		}
+		if err := store.Delete(ctx, key); err != nil && !errors.Is(err, objstore.ErrNotExist) {
+			errs = append(errs, fmt.Errorf("delete orphan %s: %w", key, err))
 			continue
 		}
 		orphaned++
 	}
-	return orphaned, errors.Join(errs...)
+	return orphaned, nil, errors.Join(errs...)
 }
